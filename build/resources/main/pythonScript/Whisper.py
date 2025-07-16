@@ -35,7 +35,7 @@ import resource
 
 
 # ─────────────────── настройки CPU / потоки ───────────────────
-NUM_THREADS = int(os.getenv("WHISPER_THREADS", "6"))  # default 2
+NUM_THREADS = int(os.getenv("WHISPER_THREADS", "3"))
 torch.set_num_threads(NUM_THREADS)
 
 # ───────────────────────── аргументы ──────────────────────────
