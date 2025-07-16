@@ -29,9 +29,9 @@ RUN python3 whisper_preload.py
 # 4) Копируем готовый JAR из репозитория
 COPY build/libs/*.jar app.jar
 
-# 5) Копируем ваши Python-скрипты (Whisper, Downloader и т.д.) и логбэк-конфиг
-COPY resources/pythonScript/ pythonScript/
-COPY logback.xml           .
+# 5) Копируем ваши Python-скрипты и логбэк-конфиг из папки src/main/resources
+COPY src/main/resources/pythonScript/ pythonScript/
+COPY src/main/resources/logback.xml          .
 
 # 6) Переменные среды и тома для хранения пользовательских файлов и логов
 ENV UPLOAD_DIR=/app/upload
