@@ -1,0 +1,24 @@
+# .gitignore
+
+# Исключаем временные, бинарные и тяжёлые файлы
+*.mp4
+*.mkv
+*.wav
+*.zip
+*.tar.gz
+*.log
+*.bak
+*.tmp
+*.ogg
+__pycache__/
+*.class
+.idea/
+.vscode/
+.env
+target/
+node_modules/
+
+# Каталоги с видео и транскрипциями
+/upload/
+download/
+transcripts/

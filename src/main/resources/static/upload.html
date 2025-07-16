@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Загрузка видео или ссылок</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .slot-row[data-active="true"] .speed { visibility: visible; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-sky-100 to-indigo-100 flex items-center justify-center p-4">
+
+<form id="upForm" class="w-full max-w-xl bg-white/90 backdrop-blur p-8 rounded-2xl shadow-xl space-y-6">
+  <h1 class="text-2xl font-bold text-center text-indigo-700">Загрузите файлы&nbsp;или вставьте ссылки</h1>
+  <p class="text-sm text-gray-600 text-center">Максимум&nbsp;5&nbsp;роликов за&nbsp;один раз. Можно смешивать файлы и ссылки.</p>
+
+  <div id="slots" class="space-y-5"></div>
+
+  <button id="sendBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-semibold transition disabled:opacity-40">Отправить</button>
+</form>
+
+<script>
+  const MAX = 5;
+  const token = location.pathname.split('/').pop();
+  const actionUrl = `/upload/${token}`;
+
+  /* ─────────────── генерация слотов ─────────────── */
+  const slotsRoot = document.getElementById('slots');
+
+  for (let i = 0; i < MAX; i++) {
+    const row = document.createElement('div');
+    row.className = 'slot-row space-y-1';
+    row.innerHTML = `
+      <div class="flex flex-col md:flex-row gap-2 items-start">
+        <label class="flex-1 cursor-pointer border rounded-md px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-500">
+          <span>Выбрать файл…</span>
+          <input type="file" name="file" class="hidden" />
+        </label>
+        <input type="text" name="url" placeholder="https://example.com/..." class="flex-1 border rounded-md px-3 py-2" autocomplete="off" />
+      </div>
+      <div class="h-1 w-full bg-gray-200 rounded-full overflow-hidden">
+        <div data-bar class="h-full bg-indigo-500 w-0 transition-all"></div>
+      </div>
+      <div class="speed text-xs text-right text-gray-500 select-none" style="visibility:hidden">0%</div>`;
+    slotsRoot.append(row);
+  }
+
+  /* ─────────── UX: имя файла & активность слота ─────────── */
+  slotsRoot.addEventListener('change', e => {
+    if (e.target.type === 'file') {
+      const span = e.target.closest('label').querySelector('span');
+      span.textContent = e.target.files.length ? e.target.files[0].name : 'Выбрать файл…';
+    }
+  });
+
+  /* ─────────── отправка ─────────── */
+  document.getElementById('sendBtn').addEventListener('click', () => {
+    const form = new FormData();
+    const slots = [...document.querySelectorAll('.slot-row')];
+
+    slots.forEach(row => row.dataset.active = 'false');
+
+    let any = false;
+    slots.forEach((row, idx) => {
+      const file = row.querySelector('input[type="file"]').files[0];
+      const url  = row.querySelector('input[name="url"]').value.trim();
+
+      if (file)  { form.append('file', file); any = true; row.dataset.active = 'true'; }
+      if (url)   { form.append('url', url);  any = true; row.dataset.active = 'true'; }
+    });
+
+    if (!any) return alert('Нужно выбрать файл или ссылку');
+
+    const xhr = new XMLHttpRequest();
+    const startTime = Date.now();
+
+    xhr.upload.onprogress = ev => {
+      if (!ev.lengthComputable) return;
+      const pct = ev.loaded / ev.total;
+      const speed = ev.loaded / ((Date.now() - startTime) / 1000); // B/s
+      const speedStr = speed > 1e6 ? (speed/1e6).toFixed(1)+' MB/s' : (speed/1e3).toFixed(1)+' kB/s';
+
+      slots.filter(r => r.dataset.active === 'true').forEach(r => {
+        r.querySelector('[data-bar]').style.width = (pct*100)+'%';
+        r.querySelector('.speed').textContent = (pct*100).toFixed(0)+'% • '+speedStr;
+      });
+    };
+
+    xhr.onload = () => {
+      slots.forEach(r => r.querySelector('[data-bar]').style.width = '100%');
+      alert(xhr.responseText || 'Готово!');
+      location.reload();
+    };
+
+    xhr.onerror = () => alert('Ошибка загрузки');
+
+    xhr.open('POST', actionUrl);
+    xhr.send(form);
+  });
+</script>
+</body>
+</html>
