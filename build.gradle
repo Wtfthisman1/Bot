@@ -10,7 +10,9 @@ version = '0.0.1-SNAPSHOT'
 
 java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
 
-bootJar { archiveFileName = 'bot.jar' }
+bootJar { archiveFileName = 'bot.jar'
+	launchScript()                       // делает jar исполняемым (как .sh)
+}
 
 repositories { mavenCentral() }
 
@@ -31,12 +33,6 @@ dependencies {
 tasks.named('test') { useJUnitPlatform() }
 
 
-sourceSets {
-	main {
-		resources {
-		}
-	}
-}
 
 
 
