@@ -3,19 +3,15 @@ version: "3.9"
 services:
   bot:
     build: .
-    container_name: transcribe-bot
-    ports:
-      - "8080:8080"
-    # ↙ ↙ ↙  абсолютные пути хоста
-    volumes:
-      - /srv/bot/storage:/data          # все загруженные файлы и результаты
-      - /var/log/transcribe-bot:/app/logs
-    environment:
-      # Spring увидит это как property app.storage.base
-      - APP_STORAGE_BASE=/data
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 2g
+    container_name: mybot
     restart: unless-stopped
+    ports:
+      - "80:8080"        # проксируем порт 80 хоста → 8080 в контейнере
+    environment:
+      # Переопределяем в Spring свойства:
+      #   upload.dir и app.storage.base
+      - UPLOAD_DIR=/app/upload
+      - APP_STORAGE_BASE=/app/upload/videos
+    volumes:
+      # Только папка для загруженных файлов (сохраняет state между рестартами)
+      - ./upload:/app/upload

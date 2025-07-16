@@ -38,6 +38,17 @@ VOLUME ["/data", "/app/logs"]
 
 EXPOSE 8080
 
+# --- предзагрузка трех моделей Whisper в кэш ---
+RUN python3 - << 'EOF'
+from faster_whisper import WhisperModel
+
+for model_name in ["base", "medium", "large-v3"]:
+    # при первом создании модель скачивается в ~/.cache/faster_whisper
+    WhisperModel(model_name, device="cpu", compute_type="int8")
+EOF
+
+
+
 # --- health-check для Docker/Compose/K8s ---
 HEALTHCHECK --interval=30s --retries=3 \
   CMD curl -f http://localhost:8080/actuator/health || exit 1
