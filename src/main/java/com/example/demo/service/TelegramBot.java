@@ -68,9 +68,10 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         long   chatId = u.getMessage().getChatId();
         String text   = u.getMessage().getText();
+        String name   = u.getMessage().getFrom().getFirstName();
 
         switch (text) {
-            case "/start"  -> sendMessage(chatId, "Привет!");
+            case "/start"  -> sendMessage(chatId, "Привет " + name);
             case "/help"   -> sendMessage(chatId,
                     "Отправьте /upload, чтобы получить ссылку на форму загрузки файлов.");
             case "/upload" -> uploadCommand(chatId);
