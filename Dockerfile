@@ -15,6 +15,7 @@ RUN apt-get update && \
 
 # 2) Python‑зависимости
 RUN pip install --no-cache-dir \
+      "numpy<2" \
       torch==2.2.1+cpu \
       -f https://download.pytorch.org/whl/torch_stable.html && \
     pip install --no-cache-dir \
