@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  bot:
+    build: .
+    container_name: transcribe-bot
+    ports:
+      - "8080:8080"
+    # ↙ ↙ ↙  абсолютные пути хоста
+    volumes:
+      - /srv/bot/storage:/data          # все загруженные файлы и результаты
+      - /var/log/transcribe-bot:/app/logs
+    environment:
+      # Spring увидит это как property app.storage.base
+      - APP_STORAGE_BASE=/data
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 2g
+    restart: unless-stopped
