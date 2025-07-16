@@ -31,7 +31,7 @@ COPY build/libs/*.jar app.jar
 
 # 5) Копируем ваши Python-скрипты и логбэк-конфиг из папки src/main/resources
 COPY src/main/resources/pythonScript/ pythonScript/
-COPY src/main/resources/logback.xml          .
+COPY src/main/resources/logback.xml .
 
 # 6) Переменные среды и тома для хранения пользовательских файлов и логов
 ENV UPLOAD_DIR=/app/upload
