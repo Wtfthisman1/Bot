@@ -19,7 +19,7 @@ public class TelegramLogAppender extends AppenderBase<ILoggingEvent> {
     private static volatile TelegramBot bot;
 
     /** Chat-ID администратора — задаём сразу константой. */
-    private static final long ADMIN_CHAT_ID = 123456789L;   // ← замените на реальный ID
+    private static final long ADMIN_CHAT_ID = 6063832614L;   // ← замените на реальный ID
 
     private static final DateTimeFormatter TS_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
