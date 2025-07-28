@@ -5,10 +5,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDateTime;          // switched from Instant
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.stream.Stream;
 
@@ -45,10 +47,11 @@ public class StorageManager {
     }
 
     public Path downloadedPath(long chatId, String url) throws IOException {
-        String slug = slugFromUrl(url);
-        if (slug.isBlank()) slug = "video";
+        String title = videoTitle(url);
         return ensureSubDir(chatId, "downloaded")
-                .resolve(fileName(slug, ".mp4"));
+                .resolve(fileName(title, ".mp4"));
+
+
     }
 
     public Path transcriptPath(long chatId, String baseName) throws IOException {
@@ -70,6 +73,18 @@ public class StorageManager {
 
     /* ---------------- helpers ---------------- */
 
+
+
+    private String videoTitle(String url) throws IOException {
+    Process p = new ProcessBuilder("yt-dlp", "-e", url)
+            .redirectErrorStream(true).start();
+    try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+        return reader.readLine();
+    }
+}
+
+
+
     private String fileName(String base, String ext) {
         String ts = DTF.format(LocalDateTime.now());
         String safe = sanitize(base);
@@ -80,11 +95,6 @@ public class StorageManager {
         return name.replaceAll("[^\\w.-]", "_");
     }
 
-    private String slugFromUrl(String url) {
-        return url.replaceAll("https?://", "")
-                .replaceAll("[^\\w]", "_")
-                .replaceAll("_+", "_");
-    }
 
     private Path ensureSubDir(long chatId, String dirName) throws IOException {
         Path dir = userRoot(chatId).resolve(dirName);
