@@ -16,6 +16,9 @@ import sys
 import yt_dlp
 from pathlib import Path
 
+
+
+
 # ────────── 1. аргументы ──────────
 if len(sys.argv) != 4:
     sys.stderr.write("Usage: download.py <url> <outDir> <fileName>\n")
@@ -25,7 +28,13 @@ url, out_dir_arg, file_name = sys.argv[1:4]
 out_dir = Path(out_dir_arg).resolve()
 out_dir.mkdir(parents=True, exist_ok=True)
 
-full_path = out_dir / file_name
+auto_name = file_name.strip() in {"", "-"}
+if auto_name:
+    file_name = ydl_out = out_dir / "%(upload_date>%Y%m%d)s_%(title)s_%(id)s.%(ext)s"
+else :
+    file_name = out_dir / file_name
+
+
 
 # ────────── 2. опции yt-dlp ──────────
 ydl_opts = {
@@ -33,7 +42,9 @@ ydl_opts = {
     "merge_output_format": "mp4",       # если подходят только mp4
     "outtmpl": str(full_path),
     "noplaylist": True,
-    "quiet": False
+    "quiet": False ,
+
+
 }
 
 
