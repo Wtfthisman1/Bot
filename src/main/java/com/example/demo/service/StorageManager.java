@@ -93,7 +93,9 @@ public class StorageManager {
     }
 
     private String sanitize(String name) {
-        return name.replaceAll("[^\\w.-]", "_");
+        String s = name.replaceAll("[^\\p{L}\\p{N}._-]", "_");
+        s = s.replaceAll("_+", "_");
+        return s.replaceAll("^_+|_+$", "");
     }
 
 
