@@ -55,8 +55,9 @@ public class StorageManager {
     }
 
     public Path transcriptPath(long chatId, String baseName) throws IOException {
+        String name = sanitize(baseName).replaceFirst("\\.[^.]+$", "");
         return ensureSubDir(chatId, "transcripts")
-                .resolve(fileName(baseName, ".txt"));
+                .resolve(name+ ".txt");
     }
 
     public Stream<Path> listFiles(long chatId) throws IOException {
