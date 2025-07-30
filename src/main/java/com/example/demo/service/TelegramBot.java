@@ -70,6 +70,8 @@ public class TelegramBot extends TelegramLongPollingBot {
         String text   = u.getMessage().getText();
         String name   = u.getMessage().getFrom().getFirstName();
 
+
+
         switch (text) {
             case "/start"  -> sendMessage(chatId, "Привет " + name);
             case "/help"   -> sendMessage(chatId,
@@ -95,6 +97,9 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         sendMessage(chatId, html.strip(), "HTML");
     }
+
+
+
 
     /** Асинхронная отправка готовой транскрипции */
     public void sendTranscript(long chatId, Path txt) {
