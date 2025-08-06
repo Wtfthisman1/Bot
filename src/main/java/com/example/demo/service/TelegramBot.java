@@ -70,8 +70,17 @@ public class TelegramBot extends TelegramLongPollingBot {
         String text   = u.getMessage().getText();
         String name   = u.getMessage().getFrom().getFirstName();
 
+        if (text.startsWith("/")) {
+            handleCommand(chatId, text, name);
+        }
+        else {
+            handleText(chatId, text, name);
+        }
+    }
 
+    /* ───────────────── helpers ───────────────── */
 
+    private void handleCommand(long chatId, String text, String name) {
         switch (text) {
             case "/start"  -> sendMessage(chatId, "Привет " + name);
             case "/help"   -> sendMessage(chatId,
@@ -81,7 +90,11 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    /* ───────────────── helpers ───────────────── */
+    private void handleText(long chatId, String text, String name) {
+    
+
+
+    }
 
     private void uploadCommand(long chatId) {
         // небольшое UX-уведомление «печатаю»
