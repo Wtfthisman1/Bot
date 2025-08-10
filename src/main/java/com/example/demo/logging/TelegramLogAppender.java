@@ -3,7 +3,7 @@ package com.example.demo.logging;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.AppenderBase;
-import com.example.demo.service.TelegramBot;
+import com.example.demo.service.MessageSender;
 import org.slf4j.MDC;
 
 import java.time.Instant;
@@ -15,8 +15,8 @@ import java.time.format.DateTimeFormatter;
  */
 public class TelegramLogAppender extends AppenderBase<ILoggingEvent> {
 
-    /** Синглтон-ссылка на бот, устанавливается из Spring. */
-    private static volatile TelegramBot bot;
+    /** Синглтон-ссылка на MessageSender, устанавливается из Spring. */
+    private static volatile MessageSender messageSender;
 
     /** Chat-ID администратора — задаём сразу константой. */
     private static final long ADMIN_CHAT_ID = 6063832614L;   // ← замените на реальный ID
@@ -28,15 +28,15 @@ public class TelegramLogAppender extends AppenderBase<ILoggingEvent> {
     /*────────────────────  Инъекция  ────────────────────*/
 
     /** Вызывается из Spring (например, в TelegramBot.@PostConstruct). */
-    public static void init(TelegramBot botBean) {
-        bot = botBean;
+    public static void init(MessageSender messageSenderBean) {
+        messageSender = messageSenderBean;
     }
 
     /*──────────────────  Основная логика  ──────────────────*/
 
     @Override
     protected void append(ILoggingEvent event) {
-        if (bot == null) return;
+        if (messageSender == null) return;
         if (!event.getLevel().isGreaterOrEqual(Level.ERROR)) return;
 
         String timestamp = TS_FMT.format(Instant.ofEpochMilli(event.getTimeStamp()));
@@ -62,7 +62,7 @@ public class TelegramLogAppender extends AppenderBase<ILoggingEvent> {
         String message = truncate(sb.toString(), 4096);
 
         try {
-            bot.sendMessage(ADMIN_CHAT_ID, message);
+            messageSender.sendMessage(ADMIN_CHAT_ID, message, "Markdown");
         } catch (Exception ex) {
             addError("Failed to send log to Telegram", ex);
         }

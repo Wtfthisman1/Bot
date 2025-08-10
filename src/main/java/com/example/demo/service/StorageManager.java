@@ -72,17 +72,32 @@ public class StorageManager {
                 .filter(p -> p.toString().endsWith(".txt"));
     }
 
+    public Path getStorageRoot() {
+        return storageRoot;
+    }
+
+    public Path getTranscriptsDir(long chatId) throws IOException {
+        return ensureSubDir(chatId, "transcripts");
+    }
+
     /* ---------------- helpers ---------------- */
 
 
 
     private String videoTitle(String url) throws IOException {
-    Process p = new ProcessBuilder("yt-dlp", "-e", url)
-            .redirectErrorStream(true).start();
-    try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-        return reader.readLine();
+        Process p = new ProcessBuilder("yt-dlp", "-e", url)
+                .redirectErrorStream(true).start();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+            String title = reader.readLine();
+            if (title == null || title.trim().isEmpty()) {
+                return "video_" + System.currentTimeMillis();
+            }
+            return title;
+        } catch (Exception e) {
+            log.warn("Не удалось получить название видео для URL: {}", url, e);
+            return "video_" + System.currentTimeMillis();
+        }
     }
-}
 
 
 

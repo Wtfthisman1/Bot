@@ -1,6 +1,7 @@
 package com.example.demo.config;
 
 import com.example.demo.logging.TelegramLogAppender;
+import com.example.demo.service.MessageSender;
 import com.example.demo.service.TelegramBot;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,13 +21,14 @@ import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 public class BotInitializer {
 
     private final TelegramBot bot;
+    private final MessageSender messageSender;
 
     @EventListener(ContextRefreshedEvent.class)
     public void init() {
         try {
             TelegramBotsApi api = new TelegramBotsApi(DefaultBotSession.class);
             api.registerBot(bot);
-            TelegramLogAppender.init(bot);
+            TelegramLogAppender.init(messageSender);
             log.info("Telegram bot registered and log appender initialized");
         } catch (TelegramApiException e) {
             log.error("Failed to register Telegram bot", e);
