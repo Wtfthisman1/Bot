@@ -82,12 +82,42 @@ public class TranscribeExecutor {
 
         tOut.join();  tErr.join();
 
-        if (proc.exitValue() != 0)
-            throw new RuntimeException("Faster-Whisper exited " + proc.exitValue() +
-                    "\n" + errBuf);
+        if (proc.exitValue() != 0) {
+            String errorDetails = errBuf.toString();
+            String errorMessage = "Faster-Whisper exited " + proc.exitValue();
+            
+            // Анализируем ошибку
+            if (errorDetails.toLowerCase().contains("empty transcription")) {
+                throw new RuntimeException("Whisper не смог распознать речь в аудио. Возможные причины:\n" +
+                    "• Слишком короткое аудио (менее 3 секунд)\n" +
+                    "• Отсутствует речь в аудио\n" +
+                    "• Плохое качество записи\n" +
+                    "• Неподдерживаемый язык\n\n" +
+                    "Детали: " + errorDetails);
+            }
+            
+            if (errorDetails.toLowerCase().contains("model")) {
+                throw new RuntimeException("Ошибка загрузки модели Whisper:\n" + errorDetails);
+            }
+            
+            throw new RuntimeException(errorMessage + "\n" + errorDetails);
+        }
 
-        if (!Files.exists(txtFile) || Files.size(txtFile) == 0)
+        if (!Files.exists(txtFile)) {
             throw new IOException("Транскрипция не создана: " + txtFile);
+        }
+        
+        // Проверяем размер файла и содержимое
+        long fileSize = Files.size(txtFile);
+        if (fileSize == 0) {
+            throw new RuntimeException("Транскрипция пустая. Whisper не смог распознать речь в аудио.");
+        }
+        
+        // Проверяем, что файл содержит текст, а не только пробелы
+        String content = Files.readString(txtFile).trim();
+        if (content.isEmpty()) {
+            throw new RuntimeException("Транскрипция пустая. Whisper не смог распознать речь в аудио.");
+        }
 
         return txtFile;
     }
