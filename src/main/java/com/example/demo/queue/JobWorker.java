@@ -2,7 +2,7 @@ package com.example.demo.queue;
 
 
 import com.example.demo.service.DownloaderExecutor;
-import com.example.demo.service.TelegramBot;
+import com.example.demo.service.MessageSender;
 import com.example.demo.service.TranscribeExecutor;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -20,7 +20,7 @@ public class JobWorker implements Runnable {
     private final JobQueue queue;
     private final DownloaderExecutor downloader;
     private final TranscribeExecutor transcriber;
-    private final TelegramBot bot;
+    private final MessageSender messageSender;
 
     private volatile boolean running = true;
     private Thread worker;
@@ -65,6 +65,6 @@ public class JobWorker implements Runnable {
     private void transcribe(ProcessingJob job) throws Exception {
         Path txt = transcriber.run(job.chatId(), job.filePath());
         log.info("Транскрипция готова {}", txt);
-        bot.sendTranscript(job.chatId(), txt);
+        messageSender.sendTranscript(job.chatId(), txt);
     }
 }
