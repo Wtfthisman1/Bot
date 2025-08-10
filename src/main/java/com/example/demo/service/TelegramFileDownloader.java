@@ -3,6 +3,7 @@ package com.example.demo.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.objects.File;
@@ -22,10 +23,17 @@ import java.util.UUID;
 public class TelegramFileDownloader {
 
     private final StorageManager storageManager;
-    private final TelegramBot telegramBot; // Ссылка на бот для выполнения API вызовов
+    private final ApplicationContext applicationContext; // Используем ApplicationContext
     
     @Value("${bot.key}")
     private String botToken;
+
+    /**
+     * Получает TelegramBot из контекста
+     */
+    private TelegramBot getTelegramBot() {
+        return applicationContext.getBean(TelegramBot.class);
+    }
 
     /**
      * Скачивает файл из Telegram по fileId
@@ -115,7 +123,7 @@ public class TelegramFileDownloader {
      * Выполняет запрос к Telegram API
      */
     private File execute(GetFile getFile) throws TelegramApiException {
-        return telegramBot.execute(getFile);
+        return getTelegramBot().execute(getFile);
     }
 }
 
