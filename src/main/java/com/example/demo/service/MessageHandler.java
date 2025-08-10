@@ -64,7 +64,10 @@ public class MessageHandler {
                 messageSender.sendTranscript(chatId, transcript);
             } catch (Exception e) {
                 log.error("Ошибка обработки голосового сообщения", e);
-                messageSender.sendMessage(chatId, "❌ Ошибка обработки голосового сообщения");
+                
+                // Формируем понятное сообщение об ошибке
+                String errorMessage = getVoiceErrorMessage(e);
+                messageSender.sendMessage(chatId, errorMessage);
             }
         });
     }
@@ -140,12 +143,39 @@ public class MessageHandler {
             urls = urls.subList(0, 5);
         }
         
+        // Фильтруем поддерживаемые ссылки
+        List<String> supportedUrls = new ArrayList<>();
+        List<String> unsupportedUrls = new ArrayList<>();
+        
+        for (String url : urls) {
+            if (isSupportedVideoUrl(url)) {
+                supportedUrls.add(url);
+            } else {
+                unsupportedUrls.add(url);
+            }
+        }
+        
+        // Отправляем предупреждение о неподдерживаемых ссылках
+        if (!unsupportedUrls.isEmpty()) {
+            StringBuilder warning = new StringBuilder("⚠️ Неподдерживаемые ссылки:\n");
+            for (String url : unsupportedUrls) {
+                warning.append("• ").append(url).append("\n");
+            }
+            warning.append("\n🔗 Поддерживаются только видео с YouTube, Vimeo, TikTok, Instagram, Twitter/X, Facebook");
+            messageSender.sendMessage(chatId, warning.toString());
+        }
+        
+        if (supportedUrls.isEmpty()) {
+            messageSender.sendMessage(chatId, "❌ Нет поддерживаемых ссылок для обработки");
+            return;
+        }
+        
         messageSender.sendChatAction(chatId, "typing");
         messageSender.sendMessage(chatId, 
-            String.format("🔗 Найдено %d ссылок. Начинаю обработку...", urls.size()));
+            String.format("🔗 Найдено %d поддерживаемых ссылок. Начинаю обработку...", supportedUrls.size()));
         
-        // Добавляем задачи в очередь
-        for (String url : urls) {
+        // Добавляем задачи в очередь только для поддерживаемых ссылок
+        for (String url : supportedUrls) {
             jobQueue.enqueue(ProcessingJob.newLink(chatId, url));
         }
     }
@@ -171,5 +201,82 @@ public class MessageHandler {
         return lower.endsWith(".mp4") || lower.endsWith(".avi") || 
                lower.endsWith(".mkv") || lower.endsWith(".mov") || 
                lower.endsWith(".webm");
+    }
+
+    /**
+     * Проверяет, является ли URL поддерживаемым видео-хостингом
+     */
+    private boolean isSupportedVideoUrl(String url) {
+        if (url == null) return false;
+        
+        String lowerUrl = url.toLowerCase();
+        
+        // Поддерживаемые платформы
+        return lowerUrl.contains("youtube.com") || 
+               lowerUrl.contains("youtu.be") ||
+               lowerUrl.contains("vimeo.com") ||
+               lowerUrl.contains("tiktok.com") ||
+               lowerUrl.contains("instagram.com") ||
+               lowerUrl.contains("twitter.com") ||
+               lowerUrl.contains("x.com") ||
+               lowerUrl.contains("facebook.com") ||
+               lowerUrl.contains("fb.com");
+    }
+
+    /**
+     * Формирует понятное сообщение об ошибке для голосовых сообщений
+     */
+    private String getVoiceErrorMessage(Exception e) {
+        String errorText = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+        
+        if (errorText.contains("не смог распознать речь") || errorText.contains("empty transcription")) {
+            return """
+                🎤 Не удалось распознать речь в голосовом сообщении
+                
+                Возможные причины:
+                • Слишком короткое сообщение (менее 3 секунд)
+                • Отсутствует речь в сообщении
+                • Плохое качество записи
+                • Неподдерживаемый язык
+                
+                💡 Попробуйте:
+                • Записать более длинное сообщение
+                • Говорить четче и громче
+                • Использовать русский или английский язык
+                """;
+        }
+        
+        if (errorText.contains("timeout")) {
+            return """
+                ⏰ Превышено время обработки голосового сообщения
+                
+                Возможные причины:
+                • Слишком длинное сообщение
+                • Высокая нагрузка на сервер
+                
+                💡 Попробуйте:
+                • Отправить более короткое сообщение
+                • Подождать и попробовать снова
+                """;
+        }
+        
+        if (errorText.contains("model") || errorText.contains("whisper")) {
+            return """
+                🤖 Ошибка системы распознавания речи
+                
+                Техническая проблема с Whisper.
+                Попробуйте позже или обратитесь к администратору.
+                """;
+        }
+        
+        // Общая ошибка
+        return """
+            ❌ Ошибка обработки голосового сообщения
+            
+            Попробуйте:
+            • Записать сообщение заново
+            • Проверить качество записи
+            • Использовать другой язык
+            """;
     }
 }
