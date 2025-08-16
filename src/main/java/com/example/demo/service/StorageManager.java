@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 @Component
@@ -85,18 +86,118 @@ public class StorageManager {
 
 
     private String videoTitle(String url) throws IOException {
-        Process p = new ProcessBuilder("yt-dlp","--no-warnings", "-e", url)
-                .redirectErrorStream(true).start();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-            String title = reader.readLine();
-            if (title == null || title.trim().isEmpty()) {
+        ProcessBuilder pb = new ProcessBuilder("yt-dlp", 
+                "-e",
+                "--no-warnings", 
+                "--ignore-errors", 
+                "--no-playlist",
+                "--quiet",
+                url)
+                .redirectError(ProcessBuilder.Redirect.DISCARD);  // Игнорируем stderr полностью
+        
+        Process p = pb.start();
+        
+        try {
+            // Ждем завершения процесса с таймаутом
+            boolean completed = p.waitFor(15, TimeUnit.SECONDS);
+            if (!completed) {
+                log.warn("Таймаут получения названия видео для URL: {}", url);
+                p.destroyForcibly();
                 return "video_" + System.currentTimeMillis();
             }
+            
+            // Проверяем код выхода
+            int exitCode = p.exitValue();
+            if (exitCode != 0) {
+                log.warn("yt-dlp завершился с ошибкой {} для URL: {}", exitCode, url);
+                return "video_" + System.currentTimeMillis();
+            }
+            
+            // Читаем только stdout и фильтруем результат
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // Фильтруем строки - убираем предупреждения и ошибки
+                    if (!isWarningOrError(line)) {
+                        output.append(line).append('\n');
+                    }
+                }
+            }
+            
+            // Обрабатываем результат
+            String result = output.toString().trim();
+            if (result.isEmpty()) {
+                log.warn("Пустое название видео для URL: {}", url);
+                return "video_" + System.currentTimeMi
+                
+                
+                
+                 llis();
+            }
+            
+            // Берем первую непустую строку (название)
+            String[] lines = result.split("\n");
+            String title = null;
+            for (String line : lines) {
+                line = line.trim();
+                if (!line.isEmpty() && !isWarningOrError(line)) {
+                    title = line;
+                    break;
+                }
+            }
+            
+            if (title == null || title.isEmpty()) {
+                log.warn("Не найдено название видео для URL: {}", url);
+                return "video_" + System.currentTimeMillis();
+            }
+            
+            // Ограничиваем длину названия
+            if (title.length() > 100) {
+                title = title.substring(0, 97) + "...";
+            }
+            
+            log.debug("Получено название видео: '{}' для URL: {}", title, url);
             return title;
-        } catch (Exception e) {
-            log.warn("Не удалось получить название видео для URL: {}", url, e);
+            
+        } catch (InterruptedException e) {
+            log.warn("Прерывание при получении названия видео для URL: {}", url, e);
+            Thread.currentThread().interrupt();
             return "video_" + System.currentTimeMillis();
+        } catch (Exception e) {
+            log.warn("Ошибка получения названия видео для URL: {}", url, e);
+            return "video_" + System.currentTimeMillis();
+        } finally {
+            // Убеждаемся, что процесс завершен
+            if (p.isAlive()) {
+                p.destroyForcibly();
+            }
         }
+    }
+    
+    /**
+     * Проверяет, является ли строка предупреждением или ошибкой
+     */
+    private boolean isWarningOrError(String line) {
+        if (line == null || line.trim().isEmpty()) {
+            return true;
+        }
+        
+        String lowerLine = line.toLowerCase();
+        
+        // Фильтруем предупреждения и ошибки
+        return lowerLine.contains("warning") ||
+               lowerLine.contains("error") ||
+               lowerLine.contains("failed") ||
+               lowerLine.contains("unable") ||
+               lowerLine.contains("invalid") ||
+               lowerLine.contains("unsupported") ||
+               lowerLine.contains("timeout") ||
+               lowerLine.contains("network") ||
+               lowerLine.contains("connection") ||
+               lowerLine.startsWith("[") && lowerLine.contains("]") ||
+               lowerLine.startsWith("error:") ||
+               lowerLine.startsWith("warning:");
     }
 
 
