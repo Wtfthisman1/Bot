@@ -7,7 +7,7 @@ WORKDIR /app
 # 1) Системные зависимости (JRE, ffmpeg для конвертации аудио, libsndfile для работы с WAV)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      openjdk-17-jre-headless \
+      openjdk-21-jre-headless \
       ffmpeg \
       libsndfile1 \
       curl && \
