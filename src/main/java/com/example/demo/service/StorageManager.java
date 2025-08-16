@@ -129,11 +129,7 @@ public class StorageManager {
             String result = output.toString().trim();
             if (result.isEmpty()) {
                 log.warn("Пустое название видео для URL: {}", url);
-                return "video_" + System.currentTimeMi
-                
-                
-                
-                 llis();
+                return "video_" + System.currentTimeMillis();
             }
             
             // Берем первую непустую строку (название)
