@@ -85,7 +85,7 @@ public class StorageManager {
 
 
     private String videoTitle(String url) throws IOException {
-        Process p = new ProcessBuilder("yt-dlp", "-e", url)
+        Process p = new ProcessBuilder("yt-dlp","--no-warnings", "-e", url)
                 .redirectErrorStream(true).start();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
             String title = reader.readLine();
