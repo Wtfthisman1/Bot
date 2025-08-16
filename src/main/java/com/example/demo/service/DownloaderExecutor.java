@@ -84,13 +84,55 @@ public class DownloaderExecutor {
         tErr.join();
 
         int exit = proc.exitValue();
-        if (exit != 0)
-            throw new RuntimeException("YT-DLP exited " + exit + "\n" + errBuf);
+        if (exit != 0) {
+            String errorOutput = errBuf.toString();
+            String errorMessage = analyzeYtDlpError(exit, errorOutput, url);
+            throw new RuntimeException(errorMessage);
+        }
 
         if (!Files.exists(dst))
             throw new IOException("Файл не создан: " + dst);
 
         return dst;
+    }
+
+    /**
+     * Анализирует ошибки yt-dlp и возвращает понятное сообщение
+     */
+    private String analyzeYtDlpError(int exitCode, String errorOutput, String url) {
+        String lowerError = errorOutput.toLowerCase();
+        
+        if (lowerError.contains("video unavailable") || lowerError.contains("private")) {
+            return String.format("❌ Видео недоступно или приватное: %s", url);
+        }
+        
+        if (lowerError.contains("unsupported url") || lowerError.contains("no video id")) {
+            return String.format("❌ Неподдерживаемый URL: %s", url);
+        }
+        
+        if (lowerError.contains("sign in") || lowerError.contains("login")) {
+            return String.format("❌ Требуется авторизация для доступа к видео: %s", url);
+        }
+        
+        if (lowerError.contains("quota") || lowerError.contains("limit")) {
+            return String.format("❌ Превышен лимит запросов для: %s", url);
+        }
+        
+        if (lowerError.contains("network") || lowerError.contains("connection")) {
+            return String.format("❌ Ошибка сети при загрузке: %s", url);
+        }
+        
+        if (lowerError.contains("age restricted") || lowerError.contains("age_restricted")) {
+            return String.format("❌ Видео с возрастными ограничениями: %s", url);
+        }
+        
+        if (lowerError.contains("copyright") || lowerError.contains("blocked")) {
+            return String.format("❌ Видео заблокировано из-за авторских прав: %s", url);
+        }
+        
+        // Общая ошибка
+        return String.format("❌ Ошибка загрузки видео (код %d): %s\n\nДетали:\n%s", 
+            exitCode, url, errorOutput);
     }
 
     /* ─────────── helpers ─────────── */
