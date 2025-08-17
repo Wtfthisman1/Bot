@@ -223,4 +223,28 @@ public class StorageManager {
                 n.endsWith(".mkv") || n.endsWith(".mov") ||
                 n.endsWith(".avi");
     }
+
+    /**
+     * Находит файл по имени во всех папках пользователей
+     */
+    public Path findFile(String fileName) {
+        try {
+            // Ищем в корневой папке хранилища
+            Path rootPath = getStorageRoot();
+            if (!Files.exists(rootPath)) {
+                return null;
+            }
+
+            // Рекурсивно ищем файл
+            return Files.walk(rootPath)
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().equals(fileName))
+                    .findFirst()
+                    .orElse(null);
+                    
+        } catch (IOException e) {
+            log.error("Ошибка поиска файла: {}", fileName, e);
+            return null;
+        }
+    }
 }

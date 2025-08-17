@@ -4,6 +4,7 @@ package com.example.demo.queue;
 import com.example.demo.service.DownloaderExecutor;
 import com.example.demo.service.MessageSender;
 import com.example.demo.service.TranscribeExecutor;
+import com.example.demo.service.DownloadService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ public class JobWorker implements Runnable {
     private final DownloaderExecutor downloader;
     private final TranscribeExecutor transcriber;
     private final MessageSender messageSender;
+    private final DownloadService downloadService;
 
     private volatile boolean running = true;
     private Thread worker;
@@ -60,13 +62,25 @@ public class JobWorker implements Runnable {
         try {
             Path file = downloader.download(job.chatId(), job.url());
             log.info("Скачано {}", file);
-            queue.enqueue(job.withFile(file));   // put гарантированно
+            
+            // Проверяем, является ли это задачей загрузки
+            if (job.downloadId() != null) {
+                downloadService.handleDownloadComplete(job.downloadId(), file);
+            } else {
+                // Обычная задача транскрибирования
+                queue.enqueue(job.withFile(file));
+            }
         } catch (Exception e) {
             log.error("Ошибка скачивания для URL: {}", job.url(), e);
             
-            // Отправляем понятное сообщение пользователю
-            String errorMessage = getErrorMessage(job.url(), e);
-            messageSender.sendMessage(job.chatId(), errorMessage);
+            // Проверяем, является ли это задачей загрузки
+            if (job.downloadId() != null) {
+                downloadService.handleDownloadError(job.downloadId(), getErrorMessage(job.url(), e));
+            } else {
+                // Обычная задача транскрибирования
+                String errorMessage = getErrorMessage(job.url(), e);
+                messageSender.sendMessage(job.chatId(), errorMessage);
+            }
         }
     }
 

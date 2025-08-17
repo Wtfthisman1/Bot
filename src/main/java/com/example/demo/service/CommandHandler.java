@@ -12,6 +12,8 @@ public class CommandHandler {
 
     private final UploadService uploadService;
     private final MessageSender messageSender;
+    private final DownloadService downloadService;
+    private final StatusService statusService;
 
     /**
      * Обрабатывает команду
@@ -21,6 +23,7 @@ public class CommandHandler {
             case "/start"  -> sendWelcomeMessage(chatId, name);
             case "/help"   -> sendHelpMessage(chatId);
             case "/upload" -> uploadCommand(chatId);
+            case "/download" -> downloadCommand(chatId);
             case "/status" -> statusCommand(chatId);
             case "/transcripts" -> transcriptsCommand(chatId);
             default        -> messageSender.sendMessage(chatId, "Не понимаю 🤔 Используйте /help для справки");
@@ -45,6 +48,7 @@ public class CommandHandler {
             Команды:
             /help - Справка
             /upload - Загрузить несколько файлов
+            /download - Скачать видео/аудио по ссылке
             /status - Статус обработки
             /transcripts - Мои транскрипции
             
@@ -77,6 +81,7 @@ public class CommandHandler {
             /upload - для загрузки до 5 файлов одновременно
             
             ⚙️ <b>Дополнительные команды:</b>
+            /download - скачать видео/аудио по ссылке
             /status - проверить статус обработки
             /transcripts - посмотреть все транскрипции
             
@@ -109,14 +114,70 @@ public class CommandHandler {
     }
 
     /**
+     * Обрабатывает команду /download
+     */
+    private void downloadCommand(long chatId) {
+        String message = """
+            📥 <b>Загрузка видео/аудио</b>
+            
+            Отправьте мне ссылку на видео или аудио, и я загружу его на сервер.
+            
+            🔗 <b>Поддерживаемые сервисы:</b>
+            • YouTube, Vimeo, TikTok
+            • Instagram, Facebook
+            • Twitter, Reddit
+            • И многие другие
+            
+            💡 <b>Как использовать:</b>
+            1. Отправьте ссылку на видео/аудио
+            2. Выберите действие: транскрибировать или скачать
+            3. Получите результат
+            
+            ⏱️ <b>Время загрузки:</b> 5-30 минут в зависимости от размера
+            """;
+        
+        messageSender.sendMessage(chatId, message, "HTML");
+    }
+
+    /**
      * Обрабатывает команду /status
      */
     private void statusCommand(long chatId) {
-        // TODO: Реализовать получение статуса из JobQueue
-        messageSender.sendMessage(chatId, "📊 Статус обработки:\n" +
-            "⏳ Ожидает обработки: 0\n" +
-            "✅ Завершено: 0\n\n" +
-            "🎉 Все задачи завершены!");
+        try {
+            StatusService.UserStatus status = statusService.getUserStatus(chatId);
+            
+            StringBuilder message = new StringBuilder();
+            message.append("📊 <b>Статус обработки:</b>\n\n");
+            
+            if (status.totalTasks() == 0 && status.activeDownloads() == 0) {
+                message.append("🎉 Нет активных задач!\n\n");
+                message.append("💡 Отправьте файл или ссылку для начала работы.");
+            } else {
+                message.append("📋 <b>Задачи в очереди:</b>\n");
+                message.append("⏳ Ожидает загрузки: ").append(status.pendingTasks()).append("\n");
+                message.append("🔄 Ожидает транскрипции: ").append(status.processingTasks()).append("\n");
+                message.append("📥 Активные загрузки: ").append(status.activeDownloads()).append("\n");
+                message.append("📊 Всего задач: ").append(status.totalTasks()).append("\n\n");
+                
+                if (status.activeDownloads() > 0) {
+                    message.append("🔗 <b>Активные загрузки:</b>\n");
+                    for (StatusService.DownloadInfo download : status.downloads()) {
+                        long duration = (System.currentTimeMillis() - download.startTime()) / 1000 / 60; // минуты
+                        message.append("• ").append(download.url()).append(" (").append(duration).append(" мин)\n");
+                    }
+                    message.append("\n");
+                }
+                
+                message.append("⏱️ Задачи обрабатываются в фоновом режиме.\n");
+                message.append("Вы получите уведомление по завершении.");
+            }
+            
+            messageSender.sendMessage(chatId, message.toString(), "HTML");
+            
+        } catch (Exception e) {
+            log.error("Ошибка получения статуса для пользователя: {}", chatId, e);
+            messageSender.sendMessage(chatId, "❌ Ошибка получения статуса. Попробуйте позже.");
+        }
     }
 
     /**
