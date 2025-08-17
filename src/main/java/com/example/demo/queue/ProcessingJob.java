@@ -9,7 +9,8 @@ public record ProcessingJob(
         long chatId,
         Path filePath,    // null => ещё не скачано
         String url,       // null => локальный файл
-        State state
+        State state,
+        String downloadId // null => обычная задача транскрибирования
 ) {
     public enum State { NEW, DOWNLOADED }
 
@@ -24,17 +25,24 @@ public record ProcessingJob(
     public static ProcessingJob newLink(long chatId, String url) {
         Objects.requireNonNull(url, "url");
         return new ProcessingJob(UUID.randomUUID().toString(),
-                chatId, null, url, State.NEW);
+                chatId, null, url, State.NEW, null);
     }
 
     public static ProcessingJob newFile(long chatId, Path file) {
         Objects.requireNonNull(file, "file");
         return new ProcessingJob(UUID.randomUUID().toString(),
-                chatId, file, null, State.DOWNLOADED);
+                chatId, file, null, State.DOWNLOADED, null);
+    }
+
+    public static ProcessingJob newDownload(long chatId, String url, String downloadId) {
+        Objects.requireNonNull(url, "url");
+        Objects.requireNonNull(downloadId, "downloadId");
+        return new ProcessingJob(UUID.randomUUID().toString(),
+                chatId, null, url, State.NEW, downloadId);
     }
 
     public ProcessingJob withFile(Path file) {
         Objects.requireNonNull(file, "file");
-        return new ProcessingJob(id, chatId, file, null, State.DOWNLOADED);
+        return new ProcessingJob(id, chatId, file, null, State.DOWNLOADED, downloadId);
     }
 }

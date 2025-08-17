@@ -30,16 +30,29 @@ public class MessageHandler {
     private final TelegramFileDownloader fileDownloader;
     private final JobQueue jobQueue;
     private final MessageSender messageSender;
+    private final ActionChoiceService actionChoiceService;
 
     /**
      * Обрабатывает текстовое сообщение
      */
     public void handleText(long chatId, String text, String name) {
+        // Проверяем, есть ли ожидающее действие
+        if (actionChoiceService.hasPendingAction(chatId)) {
+            actionChoiceService.handleActionChoice(chatId, text);
+            return;
+        }
+        
         // Проверяем, содержит ли текст ссылки
         List<String> urls = extractUrls(text);
         
         if (!urls.isEmpty()) {
-            handleUrls(chatId, urls, name);
+            // Если только одна ссылка, предлагаем выбор действия
+            if (urls.size() == 1) {
+                actionChoiceService.handleUrlWithChoice(chatId, urls.get(0), name);
+            } else {
+                // Если несколько ссылок, обрабатываем как раньше (только транскрибирование)
+                handleUrls(chatId, urls, name);
+            }
         } else {
             messageSender.sendMessage(chatId, 
                 "💡 Отправьте мне:\n" +
@@ -137,7 +150,7 @@ public class MessageHandler {
     /**
      * Обрабатывает ссылки
      */
-    private void handleUrls(long chatId, List<String> urls, String name) {
+    public void handleUrls(long chatId, List<String> urls, String name) {
         if (urls.size() > 5) {
             messageSender.sendMessage(chatId, "⚠️ Максимум 5 ссылок за раз. Обработаю первые 5.");
             urls = urls.subList(0, 5);
