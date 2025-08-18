@@ -2,6 +2,7 @@ package com.example.demo.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -12,7 +13,7 @@ import java.util.Map;
 @Slf4j
 public class ActionChoiceService {
     
-    private final MessageHandler messageHandler;
+    private final ApplicationContext applicationContext;
     private final DownloadService downloadService;
     private final MessageSender messageSender;
     
@@ -60,6 +61,7 @@ public class ActionChoiceService {
         switch (choice.toLowerCase()) {
             case "транскрибировать", "транскрипция", "текст", "расшифровка" -> {
                 messageSender.sendMessage(chatId, "📝 Начинаю транскрибирование...");
+                MessageHandler messageHandler = applicationContext.getBean(MessageHandler.class);
                 messageHandler.handleUrls(chatId, java.util.List.of(action.url()), action.userName());
             }
             case "скачать", "загрузить", "файл", "download" -> {
