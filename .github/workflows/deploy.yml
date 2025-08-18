@@ -8,7 +8,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  GITHUB_REPOSITORY: Wtfthisman1/Bot
+  GITHUB_REPOSITORY: wtfthisman1/bot
 
 jobs:
   build-and-deploy:
@@ -26,7 +26,7 @@ jobs:
         cache: gradle
         
     - name: Build JAR
-      run: ./gradlew build -x test
+      run: ./gradlew bootJar
       
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -53,9 +53,12 @@ jobs:
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
+        username: ${{ secrets.SERVER_USERNAME }}
+        password: ${{ secrets.SERVER_PASSWORD }}
         script: |
+          # Переход в директорию проекта
+          cd /root/Bot
+          
           # Остановка текущего контейнера
           docker-compose down || true
           
@@ -65,7 +68,10 @@ jobs:
           # Обновление docker-compose.yml с новым образом
           sed -i "s|image:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest|" docker-compose.yml
           
-          # Запуск нового контейнера
+          # Запуск нового контейнера с переменными окружения
+          export BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+          export ADMIN_CHAT_ID=${{ secrets.ADMIN_CHAT_ID }}
+          export GITHUB_REPOSITORY=${{ env.GITHUB_REPOSITORY }}
           docker-compose up -d
           
           # Проверка health
