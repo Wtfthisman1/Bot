@@ -1,50 +1,65 @@
 ###############################################################################
-#  Runtime (Java 17 + Python 3.11 + Whisper) без лишних стадий сборки JAR
+#  Production Docker image для развертывания (JAR собирается локально)
 ###############################################################################
+
+# ========== STAGE 1: Python dependencies ==========
+FROM python:3.11-slim AS python-deps
+WORKDIR /app
+
+# Системные зависимости
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      ffmpeg \
+      libsndfile1 \
+      curl \
+      bash && \
+    rm -rf /var/lib/apt/lists/*
+
+# Python зависимости (кешируем отдельно для быстрой пересборки)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ========== STAGE 2: Runtime ==========
 FROM python:3.11-slim AS runtime
 WORKDIR /app
 
-# 1) Системные зависимости (JRE, ffmpeg для конвертации аудио, libsndfile для работы с WAV)
+# Системные зависимости (только runtime)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       openjdk-21-jre-headless \
       ffmpeg \
       libsndfile1 \
-      curl && \
+      curl \
+      bash && \
     rm -rf /var/lib/apt/lists/*
 
-# 2) Python‑зависимости
-RUN pip install --no-cache-dir \
-      "numpy<2" \
-      torch==2.2.1+cpu \
-      -f https://download.pytorch.org/whl/torch_stable.html && \
-    pip install --no-cache-dir \
-      faster-whisper==1.0.1 \
-      yt-dlp \
-      tqdm
+# Копируем Python зависимости из предыдущей стадии
+COPY --from=python-deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=python-deps /usr/local/bin /usr/local/bin
 
-# 3) Предзагрузка моделей Whisper в кеш
-COPY whisper_preload.py .
-RUN python3 whisper_preload.py
-
-# 4) Копируем готовый JAR из репозитория
+# Копируем готовый JAR (собранный локально)
 COPY build/libs/*.jar app.jar
 
-# 5) Копируем ваши Python-скрипты и логбэк-конфиг из папки src/main/resources
+# Копируем Python скрипты и конфиги
 COPY src/main/resources/pythonScript/ pythonScript/
 COPY src/main/resources/logback.xml .
+COPY whisper_preload.py .
 
-# 6) Переменные среды и тома для хранения пользовательских файлов и логов
+# Переменные среды и тома
 ENV UPLOAD_DIR=/app/upload
 ENV APP_STORAGE_BASE=/app/upload/videos
-VOLUME ["/app/upload", "/app/logs"]
+ENV XDG_CACHE_HOME=/app/.cache
+ENV HF_HOME=/app/.cache/huggingface
+ENV JAVA_OPTS="-Xmx2g -Xms512m -XX:+UseG1GC -XX:+UseContainerSupport"
 
-# 7) Открываем порт, на котором слушает Spring Boot
+VOLUME ["/app/upload", "/app/logs", "/app/.cache"]
+
+# Порт и healthcheck
 EXPOSE 8080
-
-# 8) Docker‑healthcheck для автоперезапуска при проблемах
-HEALTHCHECK --interval=30s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:8080/actuator/health || exit 1
 
-# 9) Запуск приложения
-CMD ["java","-jar","app.jar","--upload.dir=${UPLOAD_DIR}","--app.storage.base=${APP_STORAGE_BASE}"]
+# Entrypoint
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+ENTRYPOINT ["./docker-entrypoint.sh"]

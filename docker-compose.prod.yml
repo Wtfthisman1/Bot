@@ -2,15 +2,13 @@ version: '3.8'
 
 services:
   bot:
-    build: 
-      context: .
-      dockerfile: Dockerfile
-      target: runtime
+    # Используем образ из registry
+    image: ghcr.io/${GITHUB_REPOSITORY:-Wtfthisman1/Bot}:${IMAGE_TAG:-latest}
     container_name: telegram-bot
     ports:
       - "8080:8080"
     environment:
-      # Обязательные переменные
+      # Обязательные переменные (устанавливаются на сервере)
       - BOT_TOKEN=${BOT_TOKEN}
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
       

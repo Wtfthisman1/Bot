@@ -4,25 +4,28 @@ plugins {
 	id 'io.spring.dependency-management'     version '1.1.7'
 }
 
-
 group   = 'com.example'
 version = '0.0.1-SNAPSHOT'
 
-java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
-
-bootJar { archiveFileName = 'bot.jar'
-	launchScript()                       // делает jar исполняемым (как .sh)
+java { 
+	toolchain.languageVersion = JavaLanguageVersion.of(17) 
 }
 
-repositories { mavenCentral() }
+bootJar { 
+	archiveFileName = 'bot.jar'
+	launchScript()
+}
+
+repositories { 
+	mavenCentral() 
+}
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.telegram:telegrambots:6.9.7.1'
-	implementation "org.springframework.boot:spring-boot-starter-actuator"
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'me.paulschwarz:spring-dotenv:4.0.0'
-
 
 	compileOnly         'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
@@ -33,7 +36,21 @@ dependencies {
 	testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
 }
 
-tasks.named('test') { useJUnitPlatform() }
+// Оптимизация сборки
+tasks.withType(JavaCompile) {
+	options.encoding = 'UTF-8'
+	options.compilerArgs += ['-parameters']
+}
+
+// Кеширование для ускорения сборки
+configurations.all {
+	resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+}
+
+tasks.named('test') { 
+	useJUnitPlatform()
+	maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
+}
 
 
 
