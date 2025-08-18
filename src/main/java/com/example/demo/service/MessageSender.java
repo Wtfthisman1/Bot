@@ -9,6 +9,7 @@ import org.telegram.telegrambots.meta.api.methods.send.SendChatAction;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.nio.file.Path;
@@ -79,6 +80,35 @@ public class MessageSender {
                         .build());
             } catch (TelegramApiException e) {
                 log.error("Ошибка отправки файла", e);
+            }
+        });
+    }
+
+    /**
+     * Отправляет сообщение с инлайн клавиатурой
+     */
+    public void sendMessageWithKeyboard(long chatId, String text, String parseMode, InlineKeyboardMarkup keyboard) {
+        if (text.length() > TG_LIMIT)
+            text = text.substring(0, TG_LIMIT - 3) + "…";
+
+        SendMessage msg = SendMessage.builder()
+                .chatId(String.valueOf(chatId))
+                .text(text)
+                .replyMarkup(keyboard)
+                .build();
+        if (parseMode != null) msg.setParseMode(parseMode);
+
+        final String outboundText = text;
+        final SendMessage outboundMsg = msg;
+
+        taskExecutor.execute(() -> {
+            try {
+                if (log.isDebugEnabled()) {
+                    log.debug("OUT ▶ {}", outboundText.replace("\n", "\\n"));
+                }
+                getTelegramBot().execute(outboundMsg);
+            } catch (TelegramApiException e) {
+                log.error("Ошибка sendMessageWithKeyboard", e);
             }
         });
     }
