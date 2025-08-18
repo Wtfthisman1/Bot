@@ -4,8 +4,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -42,7 +46,11 @@ public class ActionChoiceService {
             • Для сохранения файла → Скачать
             """.formatted(url);
         
-        messageSender.sendMessage(chatId, message, "HTML");
+        // Создаем инлайн кнопки
+        InlineKeyboardMarkup keyboard = createActionKeyboard(url);
+        
+        // Отправляем сообщение с кнопками
+        messageSender.sendMessageWithKeyboard(chatId, message, "HTML", keyboard);
     }
     
     /**
@@ -92,6 +100,59 @@ public class ActionChoiceService {
      */
     public void clearPendingAction(long chatId) {
         pendingActions.remove(chatId);
+    }
+    
+    /**
+     * Создает инлайн клавиатуру для выбора действия
+     */
+    private InlineKeyboardMarkup createActionKeyboard(String url) {
+        InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup();
+        
+        InlineKeyboardButton transcribeButton = new InlineKeyboardButton();
+        transcribeButton.setText("📝 Транскрибировать");
+        transcribeButton.setCallbackData("action:transcribe:" + url.hashCode());
+        
+        InlineKeyboardButton downloadButton = new InlineKeyboardButton();
+        downloadButton.setText("📥 Скачать");
+        downloadButton.setCallbackData("action:download:" + url.hashCode());
+        
+        keyboard.setKeyboard(List.of(
+            List.of(transcribeButton),
+            List.of(downloadButton)
+        ));
+        
+        return keyboard;
+    }
+    
+    /**
+     * Обрабатывает нажатие на инлайн кнопку
+     */
+    public void handleCallbackQuery(long chatId, String callbackData) {
+        if (callbackData.startsWith("action:")) {
+            String[] parts = callbackData.split(":");
+            if (parts.length >= 3) {
+                String action = parts[1];
+                int urlHash = Integer.parseInt(parts[2]);
+                
+                // Находим URL по хешу
+                PendingAction pendingAction = pendingActions.get(chatId);
+                if (pendingAction != null && pendingAction.url().hashCode() == urlHash) {
+                    switch (action) {
+                        case "transcribe" -> {
+                            messageSender.sendMessage(chatId, "📝 Начинаю транскрибирование...");
+                            MessageHandler messageHandler = applicationContext.getBean(MessageHandler.class);
+                            messageHandler.handleUrls(chatId, List.of(pendingAction.url()), pendingAction.userName());
+                            pendingActions.remove(chatId);
+                        }
+                        case "download" -> {
+                            messageSender.sendMessage(chatId, "📥 Начинаю загрузку...");
+                            downloadService.createDownloadTask(chatId, pendingAction.url(), pendingAction.userName());
+                            pendingActions.remove(chatId);
+                        }
+                    }
+                }
+            }
+        }
     }
     
     /**

@@ -21,17 +21,20 @@ public class TelegramBot extends TelegramLongPollingBot {
     private final MessageHandler messageHandler;
     private final CommandHandler commandHandler;
     private final MessageSender messageSender;
+    private final ActionChoiceService actionChoiceService;
     private final List<BotCommand> commands;
 
     public TelegramBot(BotConfig cfg,
                        MessageHandler messageHandler,
                        CommandHandler commandHandler,
-                       MessageSender messageSender) {
+                       MessageSender messageSender,
+                       ActionChoiceService actionChoiceService) {
         super(cfg.getBotToken());
         this.config = cfg;
         this.messageHandler = messageHandler;
         this.commandHandler = commandHandler;
         this.messageSender = messageSender;
+        this.actionChoiceService = actionChoiceService;
 
         this.commands = List.of(
                 new BotCommand("/start",  "Старт"),
@@ -60,6 +63,14 @@ public class TelegramBot extends TelegramLongPollingBot {
     /* ───────────────── updates ───────────────── */
     @Override
     public void onUpdateReceived(Update u) {
+        // Обработка callback queries (нажатия на инлайн кнопки)
+        if (u.hasCallbackQuery()) {
+            long chatId = u.getCallbackQuery().getMessage().getChatId();
+            String callbackData = u.getCallbackQuery().getData();
+            actionChoiceService.handleCallbackQuery(chatId, callbackData);
+            return;
+        }
+
         if (!u.hasMessage()) return;
 
         long chatId = u.getMessage().getChatId();
