@@ -11,11 +11,11 @@
 *.iws
 
 # Build artifacts
-build/
 .gradle/
 gradle-app.setting
 !gradle/wrapper/gradle-wrapper.jar
 !gradle/wrapper/gradle-wrapper.properties
+!build/libs/*.jar
 
 # Logs
 logs/
@@ -62,7 +62,7 @@ tests/
 upload/
 
 # Environment files
-.env
+# .env
 .env.local
 .env.*.local
 

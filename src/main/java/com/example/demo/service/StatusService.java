@@ -22,6 +22,9 @@ public class StatusService {
     // Кэш для хранения статусов задач (в реальном проекте лучше использовать БД)
     private final Map<String, TaskStatus> taskStatuses = new ConcurrentHashMap<>();
     
+    // Отслеживание активных задач
+    private final Map<String, ProcessingJob> activeJobs = new ConcurrentHashMap<>();
+    
     /**
      * Получает статус задач пользователя
      */
@@ -30,16 +33,26 @@ public class StatusService {
             // Получаем задачи из очереди
             List<ProcessingJob> userJobs = jobQueue.getUserJobs(chatId);
             
+            // Получаем активные задачи
+            List<ProcessingJob> activeUserJobs = activeJobs.values().stream()
+                    .filter(job -> job.chatId() == chatId)
+                    .collect(Collectors.toList());
+            
+            // Объединяем задачи из очереди и активные
+            List<ProcessingJob> allJobs = new java.util.ArrayList<>();
+            allJobs.addAll(userJobs);
+            allJobs.addAll(activeUserJobs);
+            
             // Подсчитываем статистику
-            long pendingCount = userJobs.stream()
+            long pendingCount = allJobs.stream()
                     .filter(job -> job.state() == ProcessingJob.State.NEW)
                     .count();
             
-            long processingCount = userJobs.stream()
+            long processingCount = allJobs.stream()
                     .filter(job -> job.state() == ProcessingJob.State.DOWNLOADED)
                     .count();
             
-            long totalCount = userJobs.size();
+            long totalCount = allJobs.size();
             
             // Получаем активные загрузки
             List<DownloadInfo> activeDownloads = getActiveDownloads(chatId);
@@ -57,6 +70,20 @@ public class StatusService {
             log.error("Ошибка получения статуса для пользователя: {}", chatId, e);
             return new UserStatus(chatId, 0, 0, 0, 0, List.of());
         }
+    }
+    
+    /**
+     * Отмечает задачу как активную
+     */
+    public void markJobActive(ProcessingJob job) {
+        activeJobs.put(job.id(), job);
+    }
+    
+    /**
+     * Отмечает задачу как завершенную
+     */
+    public void markJobCompleted(String jobId) {
+        activeJobs.remove(jobId);
     }
     
     /**

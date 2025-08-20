@@ -8,7 +8,9 @@ import org.springframework.stereotype.Service;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -145,7 +147,23 @@ public class DownloaderExecutor {
                     getClass().getClassLoader().getResource(res),
                     "Script not found in classpath: " + raw);
             try {
-                return new File(url.toURI()).getAbsolutePath();
+                // Проверяем, является ли URI иерархическим
+                if ("jar".equals(url.getProtocol())) {
+                    // Для JAR файлов извлекаем во временную директорию
+                    Path tempDir = Files.createTempDirectory("python-scripts");
+                    Path scriptFile = tempDir.resolve(new File(res).getName());
+                    
+                    try (InputStream in = url.openStream();
+                         OutputStream out = Files.newOutputStream(scriptFile)) {
+                        in.transferTo(out);
+                    }
+                    
+                    // Делаем файл исполняемым
+                    scriptFile.toFile().setExecutable(true);
+                    return scriptFile.toAbsolutePath().toString();
+                } else {
+                    return new File(url.toURI()).getAbsolutePath();
+                }
             } catch (Exception e) {
                 throw new IOException("Не удалось извлечь скрипт из classpath", e);
             }

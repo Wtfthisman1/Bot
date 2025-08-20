@@ -109,10 +109,10 @@ deploy() {
     log "Логи: ssh $SERVER_USER@$SERVER_IP 'cd /root/Bot && ./deploy.sh logs'"
 }
 
-# Функция обновления
+    # Функция обновления
 update() {
     log "Обновление приложения..."
-    run_on_server "cd /root/Bot && git pull origin main"
+    run_on_server "cd /root/Bot && git pull origin master"
     run_on_server "cd /root/Bot && ./deploy.sh deploy"
 }
 

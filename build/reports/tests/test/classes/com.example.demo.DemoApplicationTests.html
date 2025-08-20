@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - DemoApplicationTests</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>DemoApplicationTests</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/com.example.demo.html">com.example.demo</a> &gt; DemoApplicationTests</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">1</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">1.774s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="tab-container">
+<ul class="tabLinks">
+<li>
+<a href="#">Tests</a>
+</li>
+<li>
+<a href="#">Standard output</a>
+</li>
+</ul>
+<div class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">contextLoads()</td>
+<td class="success">1.774s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>Standard Commons Logging discovery in action with spring-jcl: please remove commons-logging.jar from classpath in order to avoid potential conflicts
+18:12:55,823 |-INFO in ch.qos.logback.classic.LoggerContext[default] - This is logback-classic version 1.5.18
+18:12:55,827 |-INFO in ch.qos.logback.classic.util.ContextInitializer@207b8649 - Here is a list of configurators discovered as a service, by rank: 
+18:12:55,828 |-INFO in ch.qos.logback.classic.util.ContextInitializer@207b8649 -   org.springframework.boot.logging.logback.RootLogLevelConfigurator
+18:12:55,828 |-INFO in ch.qos.logback.classic.util.ContextInitializer@207b8649 - They will be invoked in order until ExecutionStatus.DO_NOT_INVOKE_NEXT_IF_ANY is returned.
+18:12:55,828 |-INFO in ch.qos.logback.classic.util.ContextInitializer@207b8649 - Constructed configurator of type class org.springframework.boot.logging.logback.RootLogLevelConfigurator
+18:12:55,840 |-INFO in ch.qos.logback.classic.util.ContextInitializer@207b8649 - org.springframework.boot.logging.logback.RootLogLevelConfigurator.configure() call lasted 0 milliseconds. ExecutionStatus=INVOKE_NEXT_IF_ANY
+18:12:55,840 |-INFO in ch.qos.logback.classic.util.ContextInitializer@207b8649 - Trying to configure with ch.qos.logback.classic.joran.SerializedModelConfigurator
+18:12:55,841 |-INFO in ch.qos.logback.classic.util.ContextInitializer@207b8649 - Constructed configurator of type class ch.qos.logback.classic.joran.SerializedModelConfigurator
+18:12:55,845 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Could NOT find resource [logback-test.scmo]
+18:12:55,845 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Could NOT find resource [logback.scmo]
+18:12:55,845 |-INFO in ch.qos.logback.classic.util.ContextInitializer@207b8649 - ch.qos.logback.classic.joran.SerializedModelConfigurator.configure() call lasted 4 milliseconds. ExecutionStatus=INVOKE_NEXT_IF_ANY
+18:12:55,845 |-INFO in ch.qos.logback.classic.util.ContextInitializer@207b8649 - Trying to configure with ch.qos.logback.classic.util.DefaultJoranConfigurator
+18:12:55,846 |-INFO in ch.qos.logback.classic.util.ContextInitializer@207b8649 - Constructed configurator of type class ch.qos.logback.classic.util.DefaultJoranConfigurator
+18:12:55,847 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Could NOT find resource [logback-test.xml]
+18:12:55,851 |-INFO in ch.qos.logback.classic.LoggerContext[default] - Found resource [logback.xml] at [file:/home/isaak/IdeaProjects/Bot/build/resources/main/logback.xml]
+18:12:55,959 |-WARN in ch.qos.logback.core.joran.action.ParamAction - &lt;param&gt; element is deprecated in favor of a more direct syntax.At line 25
+18:12:55,959 |-WARN in ch.qos.logback.core.joran.action.ParamAction - For details see https://logback.qos.ch/codes.html#param
+18:12:56,032 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [CONSOLE]
+18:12:56,032 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.ConsoleAppender]
+18:12:56,044 |-INFO in ch.qos.logback.core.model.processor.ImplicitModelHandler - Assuming default type [ch.qos.logback.classic.encoder.PatternLayoutEncoder] for [encoder] property
+18:12:56,114 |-INFO in ch.qos.logback.core.ConsoleAppender[CONSOLE] - BEWARE: Writing to the console can be very slow. Avoid logging to the 
+18:12:56,114 |-INFO in ch.qos.logback.core.ConsoleAppender[CONSOLE] - console in production environments, especially in high volume systems.
+18:12:56,114 |-INFO in ch.qos.logback.core.ConsoleAppender[CONSOLE] - See also https://logback.qos.ch/codes.html#slowConsole
+18:12:56,115 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [FILE]
+18:12:56,115 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.rolling.RollingFileAppender]
+18:12:56,128 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@1706272858 - No compression will be used
+18:12:56,135 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@1706272858 - Will use the pattern logs/app.%d{yyyy-MM-dd}.log for the active file
+18:12:56,145 |-INFO in c.q.l.core.rolling.DefaultTimeBasedFileNamingAndTriggeringPolicy - The date pattern is 'yyyy-MM-dd' from file name pattern 'logs/app.%d{yyyy-MM-dd}.log'.
+18:12:56,145 |-INFO in c.q.l.core.rolling.DefaultTimeBasedFileNamingAndTriggeringPolicy - Roll-over at midnight.
+18:12:56,146 |-INFO in c.q.l.core.rolling.DefaultTimeBasedFileNamingAndTriggeringPolicy - Setting initial period to 2025-08-20T15:01:29.362Z
+18:12:56,148 |-INFO in ch.qos.logback.core.model.processor.ImplicitModelHandler - Assuming default type [ch.qos.logback.classic.encoder.PatternLayoutEncoder] for [encoder] property
+18:12:56,152 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[FILE] - Active log file name: logs/app.log
+18:12:56,152 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[FILE] - File property is set to [logs/app.log]
+18:12:56,155 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [TELEGRAM]
+18:12:56,155 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [com.example.demo.logging.TelegramLogAppender]
+18:12:56,157 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@34997338 - value &quot;admin.chat.id_IS_UNDEFINED&quot; substituted for &quot;${admin.chat.id}&quot;
+18:12:56,159 |-WARN in ch.qos.logback.core.joran.util.PropertySetter@57eda880 - No setter for property [adminChatId] in com.example.demo.logging.TelegramLogAppender.
+18:12:56,163 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [com.example.demo] to DEBUG
+18:12:56,167 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [com.example.demo] to false
+18:12:56,168 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[com.example.demo]
+18:12:56,169 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [FILE] to Logger[com.example.demo]
+18:12:56,169 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [TELEGRAM] to Logger[com.example.demo]
+18:12:56,171 |-INFO in ch.qos.logback.classic.model.processor.RootLoggerModelHandler - Setting level of ROOT logger to INFO
+18:12:56,171 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[ROOT]
+18:12:56,172 |-INFO in ch.qos.logback.core.model.processor.DefaultProcessor@2b5825fa - End of configuration.
+18:12:56,173 |-INFO in ch.qos.logback.classic.joran.JoranConfigurator@53d1b9b3 - Registering current configuration as safe fallback point
+18:12:56,173 |-INFO in ch.qos.logback.classic.util.ContextInitializer@207b8649 - ch.qos.logback.classic.util.DefaultJoranConfigurator.configure() call lasted 327 milliseconds. ExecutionStatus=DO_NOT_INVOKE_NEXT_IF_ANY
+
+18:12:56.378 INFO  o.s.t.c.s.AnnotationConfigContextLoaderUtils – Could not detect default configuration classes for test class [com.example.demo.DemoApplicationTests]: DemoApplicationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+18:12:56.578 INFO  o.s.b.t.c.SpringBootTestContextBootstrapper – Found @SpringBootConfiguration com.example.demo.SpringBotApplication for test class com.example.demo.DemoApplicationTests
+18:12:57,195 |-WARN in ch.qos.logback.core.joran.action.ParamAction - &lt;param&gt; element is deprecated in favor of a more direct syntax.At line 25
+18:12:57,195 |-WARN in ch.qos.logback.core.joran.action.ParamAction - For details see https://logback.qos.ch/codes.html#param
+18:12:57,199 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [CONSOLE]
+18:12:57,199 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.ConsoleAppender]
+18:12:57,200 |-INFO in ch.qos.logback.core.model.processor.ImplicitModelHandler - Assuming default type [ch.qos.logback.classic.encoder.PatternLayoutEncoder] for [encoder] property
+18:12:57,201 |-INFO in ch.qos.logback.core.ConsoleAppender[CONSOLE] - BEWARE: Writing to the console can be very slow. Avoid logging to the 
+18:12:57,201 |-INFO in ch.qos.logback.core.ConsoleAppender[CONSOLE] - console in production environments, especially in high volume systems.
+18:12:57,201 |-INFO in ch.qos.logback.core.ConsoleAppender[CONSOLE] - See also https://logback.qos.ch/codes.html#slowConsole
+18:12:57,201 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [FILE]
+18:12:57,201 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [ch.qos.logback.core.rolling.RollingFileAppender]
+18:12:57,202 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@1498621286 - No compression will be used
+18:12:57,202 |-INFO in c.q.l.core.rolling.TimeBasedRollingPolicy@1498621286 - Will use the pattern logs/app.%d{yyyy-MM-dd}.log for the active file
+18:12:57,203 |-INFO in c.q.l.core.rolling.DefaultTimeBasedFileNamingAndTriggeringPolicy - The date pattern is 'yyyy-MM-dd' from file name pattern 'logs/app.%d{yyyy-MM-dd}.log'.
+18:12:57,203 |-INFO in c.q.l.core.rolling.DefaultTimeBasedFileNamingAndTriggeringPolicy - Roll-over at midnight.
+18:12:57,204 |-INFO in c.q.l.core.rolling.DefaultTimeBasedFileNamingAndTriggeringPolicy - Setting initial period to 2025-08-20T15:01:29.362Z
+18:12:57,205 |-INFO in ch.qos.logback.core.model.processor.ImplicitModelHandler - Assuming default type [ch.qos.logback.classic.encoder.PatternLayoutEncoder] for [encoder] property
+18:12:57,206 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[FILE] - Active log file name: logs/app.log
+18:12:57,206 |-INFO in ch.qos.logback.core.rolling.RollingFileAppender[FILE] - File property is set to [logs/app.log]
+18:12:57,206 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - Processing appender named [TELEGRAM]
+18:12:57,206 |-INFO in ch.qos.logback.core.model.processor.AppenderModelHandler - About to instantiate appender of type [com.example.demo.logging.TelegramLogAppender]
+18:12:57,206 |-INFO in ch.qos.logback.core.model.processor.ModelInterpretationContext@dca2615 - value &quot;admin.chat.id_IS_UNDEFINED&quot; substituted for &quot;${admin.chat.id}&quot;
+18:12:57,206 |-WARN in ch.qos.logback.core.joran.util.PropertySetter@421a4ee1 - No setter for property [adminChatId] in com.example.demo.logging.TelegramLogAppender.
+18:12:57,207 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting level of logger [com.example.demo] to DEBUG
+18:12:57,207 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@1237e0be - Propagating DEBUG level on Logger[com.example.demo] onto the JUL framework
+18:12:57,208 |-INFO in ch.qos.logback.classic.model.processor.LoggerModelHandler - Setting additivity of logger [com.example.demo] to false
+18:12:57,208 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[com.example.demo]
+18:12:57,208 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [FILE] to Logger[com.example.demo]
+18:12:57,208 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [TELEGRAM] to Logger[com.example.demo]
+18:12:57,208 |-INFO in ch.qos.logback.classic.model.processor.RootLoggerModelHandler - Setting level of ROOT logger to INFO
+18:12:57,208 |-INFO in ch.qos.logback.classic.jul.LevelChangePropagator@1237e0be - Propagating INFO level on Logger[ROOT] onto the JUL framework
+18:12:57,208 |-INFO in ch.qos.logback.core.model.processor.AppenderRefModelHandler - Attaching appender named [CONSOLE] to Logger[ROOT]
+18:12:57,208 |-INFO in ch.qos.logback.core.model.processor.DefaultProcessor@528f8f8b - End of configuration.
+18:12:57,208 |-INFO in org.springframework.boot.logging.logback.SpringBootJoranConfigurator@ea9e141 - Registering current configuration as safe fallback point
+
+18:12:57.268 INFO  o.h.validator.internal.util.Version – HV000001: Hibernate Validator 8.0.2.Final
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::               (v3.3.12)
+
+18:12:57.371 INFO  c.example.demo.DemoApplicationTests – Starting DemoApplicationTests using Java 17.0.14 with PID 47519 (started by isaak in /home/isaak/IdeaProjects/Bot)
+18:12:57.374 INFO  c.example.demo.DemoApplicationTests – No active profile set, falling back to 1 default profile: &quot;default&quot;
+18:12:59.853 INFO  com.example.demo.config.BotConfig – === Конфигурация бота ===
+18:12:59.854 INFO  com.example.demo.config.BotConfig – Bot Name: FindInform_rail_bot
+18:12:59.855 INFO  com.example.demo.config.BotConfig – Bot Token: 7393663223...
+18:12:59.855 INFO  com.example.demo.config.BotConfig – Admin Chat ID: 6063832614
+18:12:59.855 INFO  com.example.demo.config.BotConfig – =========================
+18:13:00.008 INFO  c.e.demo.service.DownloadService – DownloadService инициализирован с downloadBaseUrl из properties: http://localhost:8080
+18:13:00.016 INFO  c.e.demo.service.DownloadService – DOWNLOAD_BASE_URL из env: null
+18:13:02.175 INFO  com.example.demo.config.EnvConfig – Загружаю переменные из .env файла
+18:13:02.177 INFO  com.example.demo.config.EnvConfig – Загружено 5 переменных из .env файла
+18:13:02.180 INFO  com.example.demo.config.EnvLoader – Загружаю переменные из .env файла
+18:13:02.182 INFO  com.example.demo.config.EnvLoader – Загружено 5 переменных из .env файла
+18:13:04.386 INFO  o.s.b.a.e.web.EndpointLinksResolver – Exposing 3 endpoints beneath base path '/actuator'
+18:13:04.872 INFO  c.example.demo.config.BotInitializer – Telegram bot registered and log appender initialized
+18:13:04.875 INFO  c.example.demo.DemoApplicationTests – Started DemoApplicationTests in 8.065 seconds (process running for 10.489)
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="https://www.gradle.org">Gradle 8.14</a> at Aug 20, 2025, 6:13:07 PM</p>
+</div>
+</div>
+</body>
+</html>
