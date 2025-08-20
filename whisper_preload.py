@@ -1,0 +1,1 @@
+import faster_whisper
