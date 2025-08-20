@@ -13,7 +13,7 @@ _FW_REPO_MAP = {
     "large-v3": "guillaumekln/faster-whisper-large-v3",
 }
 
-models_env = os.getenv("WHISPER_PRELOAD_MODELS", "").strip()
+models_env = os.getenv("WHISPER_PRELOAD_MODELS", "medium").strip()
 if not models_env:
     print("No WHISPER_PRELOAD_MODELS set. Skipping preload.")
 else:

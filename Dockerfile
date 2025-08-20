@@ -36,9 +36,8 @@ ENV JAVA_OPTS="-Xmx2g -Xms512m -XX:+UseG1GC -XX:+UseContainerSupport"
 # Создаем рабочие директории (кешируем)
 RUN mkdir -p /app/upload /app/logs /app/.cache/huggingface
 
-# Предварительная загрузка модели Whisper (кешируем)
+# Скрипт предзагрузки модели Whisper
 COPY whisper_preload.py .
-RUN python3 whisper_preload.py || echo "Модель будет загружена при первом использовании"
 
 # === НЕ КЕШИРУЕМЫЕ СЛОИ (обновляются при каждой сборке) ===
 # Принудительно обновляем каждый раз
