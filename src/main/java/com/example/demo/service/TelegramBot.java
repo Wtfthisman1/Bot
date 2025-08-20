@@ -40,8 +40,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                 new BotCommand("/start",  "Старт"),
                 new BotCommand("/help",   "Справка"),
                 new BotCommand("/upload", "Получить ссылку"),
-                new BotCommand("/status", "Статус"),
-                new BotCommand("/transcripts", "Мои транскрипции")
+                new BotCommand("/status", "Статус")
         );
     }
 

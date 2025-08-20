@@ -1,0 +1,300 @@
+---
+alwaysApply: true
+---
+
+{
+  "name": "Java Universal Style Guide",
+  "version": "1.0.0",
+  "language": "java",
+  "description": "Универсальные правила и лучшие практики Java на базе Google Java Style + Oracle Conventions. Без привязки к фреймворкам.",
+  "tags": ["java", "style", "conventions", "lint"],
+  "applies_to": ["*.java"],
+  "rules": [
+    {
+      "id": "naming-conventions",
+      "title": "Именование",
+      "severity": "error",
+      "text": [
+        "Классы/интерфейсы/enum/annotation: PascalCase (e.g., OrderService).",
+        "Методы/переменные/параметры: camelCase.",
+        "Константы: UPPER_SNAKE_CASE с final static.",
+        "Имена информативные, без аббревиатур вида tmp, obj, data."
+      ]
+    },
+    {
+      "id": "braces-placement",
+      "title": "Скобки и форматирование",
+      "severity": "warning",
+      "text": [
+        "Открывающая { на той же строке (K&R).",
+        "Отступ 4 пробела, табы запрещены.",
+        "Одна строка между методами, без лишних пустых строк.",
+        "Максимальная длина строки 100 символов (желательно)."
+      ]
+    },
+    {
+      "id": "imports-order",
+      "title": "Импорты",
+      "severity": "error",
+      "text": [
+        "Без wildcard-импортов (запрещено `import x.*`).",
+        "Порядок: java.*, javax.*, затем сторонние, затем проектные; внутри группы — алфавит.",
+        "Удалять неиспользуемые импорты."
+      ]
+    },
+    {
+      "id": "exceptions-handling",
+      "title": "Исключения",
+      "severity": "error",
+      "text": [
+        "Запрещены пустые catch-блоки.",
+        "Либо логируем (минимум уровень WARN), либо пробрасываем с контекстом.",
+        "Не глушим InterruptedException — восстанавливаем флаг: `Thread.currentThread().interrupt();`",
+        "Использовать собственные Checked/Unchecked исключения по необходимости."
+      ]
+    },
+    {
+      "id": "null-and-optional",
+      "title": "Null/Optional",
+      "severity": "warning",
+      "text": [
+        "Минимизировать null. Для возвращаемых значений по возможности использовать Optional.",
+        "Не использовать Optional в полях и параметрах (только как return).",
+        "Проверки объектов через Objects.requireNonNull при контракте non-null."
+      ]
+    },
+    {
+      "id": "collections-interfaces",
+      "title": "Коллекции и дженерики",
+      "severity": "warning",
+      "text": [
+        "Параметры/возвраты — через интерфейсы (List/Map/Set), а не конкретные реализации.",
+        "Инициализация через реализацию (new ArrayList<>()) — ок.",
+        "Указывать дженерик-аргументы (без raw types)."
+      ]
+    },
+    {
+      "id": "resources-safety",
+      "title": "Работа с ресурсами",
+      "severity": "error",
+      "text": [
+        "Обязательно try-with-resources для IO/Closeable/Lock.",
+        "Socket/Channel/Stream/Reader/Writer всегда закрывать автоматически."
+      ]
+    },
+    {
+      "id": "concurrency",
+      "title": "Многопоточность",
+      "severity": "warning",
+      "text": [
+        "Предпочитать java.util.concurrent (ExecutorService, Locks, Concurrent коллекции).",
+        "При работе с lock — lock()/unlock() в try/finally.",
+        "Объекты, читаемые из разных потоков, должны быть immutable или корректно синхронизированы."
+      ]
+    },
+    {
+      "id": "immutability-final",
+      "title": "Иммутабельность и final",
+      "severity": "info",
+      "text": [
+        "Поля и локальные переменные делать final, если значение не меняется.",
+        "Классы-значения (DTO) по возможности иммутабельны (final поля, без сеттеров)."
+      ]
+    },
+    {
+      "id": "logging",
+      "title": "Логирование",
+      "severity": "info",
+      "text": [
+        "Логгеры — private static final.",
+        "Не логировать пароли/ключи/PII.",
+        "Сообщение + контекст (ключевые поля), без избыточной болтовни."
+      ]
+    },
+    {
+      "id": "api-design",
+      "title": "API и сигнатуры",
+      "severity": "warning",
+      "text": [
+        "Методы не должны быть слишком длинными: выносить подзадачи в приватные методы.",
+        "У публичных методов Javadoc с контрактом (параметры, возврат, исключения).",
+        "Методы возвращают конкретный результат, побочные эффекты минимизируем."
+      ]
+    },
+    {
+      "id": "tests",
+      "title": "Тесты",
+      "severity": "info",
+      "text": [
+        "Юнит-тесты для бизнес-логики, имена тестов описательные.",
+        "AAA-паттерн (Arrange-Act-Assert), изоляция зависимостей (моки/стабы).",
+        "Детерминированность: без `Thread.sleep` в логике теста (использовать awaitility/conditions)."
+      ]
+    },
+    {
+      "id": "code-smells",
+      "title": "Запахи кода",
+      "severity": "warning",
+      "text": [
+        "Избегать дублирования (DRY), магических чисел, больших методов/классов.",
+        "Предпочитать switch/полиморфизм вместо каскада if-else.",
+        "Валидация входов на границах (public API)."
+      ]
+    }
+  ],
+  "generation_guidelines": [
+    "Всегда использовать try-with-resources для IO.",
+    "Не глушить InterruptedException, восстанавливать флаг.",
+    "Форматирование: отступ 4 пробела, длина строки ≤ 100 символов, K&R-скобки.",
+    "Именование: класс — PascalCase, метод/переменная — camelCase, константы — UPPER_SNAKE_CASE.",
+    "Интерфейсы в сигнатурах коллекций, конкретные реализации — только при создании."
+  ]
+}
+{
+  "name": "Java Universal Style Guide",
+  "version": "1.0.0",
+  "language": "java",
+  "description": "Универсальные правила и лучшие практики Java на базе Google Java Style + Oracle Conventions. Без привязки к фреймворкам.",
+  "tags": ["java", "style", "conventions", "lint"],
+  "applies_to": ["*.java"],
+  "rules": [
+    {
+      "id": "naming-conventions",
+      "title": "Именование",
+      "severity": "error",
+      "text": [
+        "Классы/интерфейсы/enum/annotation: PascalCase (e.g., OrderService).",
+        "Методы/переменные/параметры: camelCase.",
+        "Константы: UPPER_SNAKE_CASE с final static.",
+        "Имена информативные, без аббревиатур вида tmp, obj, data."
+      ]
+    },
+    {
+      "id": "braces-placement",
+      "title": "Скобки и форматирование",
+      "severity": "warning",
+      "text": [
+        "Открывающая { на той же строке (K&R).",
+        "Отступ 4 пробела, табы запрещены.",
+        "Одна строка между методами, без лишних пустых строк.",
+        "Максимальная длина строки 100 символов (желательно)."
+      ]
+    },
+    {
+      "id": "imports-order",
+      "title": "Импорты",
+      "severity": "error",
+      "text": [
+        "Без wildcard-импортов (запрещено `import x.*`).",
+        "Порядок: java.*, javax.*, затем сторонние, затем проектные; внутри группы — алфавит.",
+        "Удалять неиспользуемые импорты."
+      ]
+    },
+    {
+      "id": "exceptions-handling",
+      "title": "Исключения",
+      "severity": "error",
+      "text": [
+        "Запрещены пустые catch-блоки.",
+        "Либо логируем (минимум уровень WARN), либо пробрасываем с контекстом.",
+        "Не глушим InterruptedException — восстанавливаем флаг: `Thread.currentThread().interrupt();`",
+        "Использовать собственные Checked/Unchecked исключения по необходимости."
+      ]
+    },
+    {
+      "id": "null-and-optional",
+      "title": "Null/Optional",
+      "severity": "warning",
+      "text": [
+        "Минимизировать null. Для возвращаемых значений по возможности использовать Optional.",
+        "Не использовать Optional в полях и параметрах (только как return).",
+        "Проверки объектов через Objects.requireNonNull при контракте non-null."
+      ]
+    },
+    {
+      "id": "collections-interfaces",
+      "title": "Коллекции и дженерики",
+      "severity": "warning",
+      "text": [
+        "Параметры/возвраты — через интерфейсы (List/Map/Set), а не конкретные реализации.",
+        "Инициализация через реализацию (new ArrayList<>()) — ок.",
+        "Указывать дженерик-аргументы (без raw types)."
+      ]
+    },
+    {
+      "id": "resources-safety",
+      "title": "Работа с ресурсами",
+      "severity": "error",
+      "text": [
+        "Обязательно try-with-resources для IO/Closeable/Lock.",
+        "Socket/Channel/Stream/Reader/Writer всегда закрывать автоматически."
+      ]
+    },
+    {
+      "id": "concurrency",
+      "title": "Многопоточность",
+      "severity": "warning",
+      "text": [
+        "Предпочитать java.util.concurrent (ExecutorService, Locks, Concurrent коллекции).",
+        "При работе с lock — lock()/unlock() в try/finally.",
+        "Объекты, читаемые из разных потоков, должны быть immutable или корректно синхронизированы."
+      ]
+    },
+    {
+      "id": "immutability-final",
+      "title": "Иммутабельность и final",
+      "severity": "info",
+      "text": [
+        "Поля и локальные переменные делать final, если значение не меняется.",
+        "Классы-значения (DTO) по возможности иммутабельны (final поля, без сеттеров)."
+      ]
+    },
+    {
+      "id": "logging",
+      "title": "Логирование",
+      "severity": "info",
+      "text": [
+        "Логгеры — private static final.",
+        "Не логировать пароли/ключи/PII.",
+        "Сообщение + контекст (ключевые поля), без избыточной болтовни."
+      ]
+    },
+    {
+      "id": "api-design",
+      "title": "API и сигнатуры",
+      "severity": "warning",
+      "text": [
+        "Методы не должны быть слишком длинными: выносить подзадачи в приватные методы.",
+        "У публичных методов Javadoc с контрактом (параметры, возврат, исключения).",
+        "Методы возвращают конкретный результат, побочные эффекты минимизируем."
+      ]
+    },
+    {
+      "id": "tests",
+      "title": "Тесты",
+      "severity": "info",
+      "text": [
+        "Юнит-тесты для бизнес-логики, имена тестов описательные.",
+        "AAA-паттерн (Arrange-Act-Assert), изоляция зависимостей (моки/стабы).",
+        "Детерминированность: без `Thread.sleep` в логике теста (использовать awaitility/conditions)."
+      ]
+    },
+    {
+      "id": "code-smells",
+      "title": "Запахи кода",
+      "severity": "warning",
+      "text": [
+        "Избегать дублирования (DRY), магических чисел, больших методов/классов.",
+        "Предпочитать switch/полиморфизм вместо каскада if-else.",
+        "Валидация входов на границах (public API)."
+      ]
+    }
+  ],
+  "generation_guidelines": [
+    "Всегда использовать try-with-resources для IO.",
+    "Не глушить InterruptedException, восстанавливать флаг.",
+    "Форматирование: отступ 4 пробела, длина строки ≤ 100 символов, K&R-скобки.",
+    "Именование: класс — PascalCase, метод/переменная — camelCase, константы — UPPER_SNAKE_CASE.",
+    "Интерфейсы в сигнатурах коллекций, конкретные реализации — только при создании."
+  ]
+}

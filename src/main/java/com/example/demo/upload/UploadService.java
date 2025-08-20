@@ -1,6 +1,7 @@
 package com.example.demo.upload;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -8,28 +9,64 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.security.SecureRandom;
+import org.springframework.beans.factory.InitializingBean;
 
 @Service
 @RequiredArgsConstructor
-public class UploadService {
+@Slf4j
+public class UploadService implements InitializingBean {
 
     /** Базовый URL, например: http://myserver:8080 */
-    @Value("${upload.base-url}")
+    @Value("${upload.base-url:http://localhost:8080}")
     private String baseUrl;
+    
+    @Override
+    public void afterPropertiesSet() {
+        log.info("UploadService initialized with baseUrl: {}", baseUrl);
+    }
 
-    /** Срок действия токена (по умолчанию 1 ч.). */
-    private static final Duration TTL = Duration.ofHours(1);
+    /** Длина токена */
+    @Value("${upload.token.length:8}")
+    private int tokenLength;
+
+    /** Символы для токена */
+    @Value("${upload.token.chars:ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789}")
+    private String tokenChars;
+
+    /** Срок действия токена в часах */
+    @Value("${upload.token.ttl.hours:1}")
+    private int tokenTtlHours;
+
+    /** Генератор случайных чисел для коротких токенов */
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     /** token → info */
     private final Map<String, TokenInfo> tokens = new ConcurrentHashMap<>();
 
+    /** Сгенерировать короткий токен */
+    private String generateShortToken() {
+        StringBuilder token = new StringBuilder(tokenLength);
+        for (int i = 0; i < tokenLength; i++) {
+            token.append(tokenChars.charAt(RANDOM.nextInt(tokenChars.length())));
+        }
+        return token.toString();
+    }
+
     /** Сгенерировать одноразовую ссылку вида  {baseUrl}/upload/{token} */
     public String generate(long chatId) {
-        String token = UUID.randomUUID().toString().replace("-", "");
-        tokens.put(token, new TokenInfo(chatId, Instant.now().plus(TTL)));
-        return baseUrl + "/upload/" + token;
+        String token = generateShortToken();
+        tokens.put(token, new TokenInfo(chatId, Instant.now().plus(Duration.ofHours(tokenTtlHours))));
+        
+        // Принудительно используем правильный URL с портом
+        String correctBaseUrl = "http://91.184.242.68:8080";
+        String link = correctBaseUrl + "/upload/" + token;
+        
+        log.debug("Generated link: {}", link);
+        log.debug("baseUrl from config: {}", baseUrl);
+        
+        return link;
     }
 
     /** Проверить и погасить токен; возвращает chatId либо <code>null</code>. */
