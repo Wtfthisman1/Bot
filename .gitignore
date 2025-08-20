@@ -22,3 +22,40 @@ node_modules/
 /upload/
 download/
 transcripts/
+
+# Gradle
+.gradle/
+build/
+out/
+
+# IDE
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.swp
+*.swo
+*~
+
+# Python
+*.pyc
+*.pyo
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+logs/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.production
+temp.env

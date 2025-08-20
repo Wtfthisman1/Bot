@@ -14,6 +14,14 @@ java {
 bootJar { 
 	archiveFileName = 'bot.jar'
 	launchScript()
+	
+	// Явно включаем статические ресурсы
+	from('src/main/resources') {
+		include 'static/**'
+		include 'application.properties'
+		include 'logback.xml'
+		include 'pythonScript/**'
+	}
 }
 
 repositories { 
@@ -23,6 +31,7 @@ repositories {
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 	implementation 'org.telegram:telegrambots:6.9.7.1'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'me.paulschwarz:spring-dotenv:4.0.0'
@@ -40,6 +49,7 @@ dependencies {
 tasks.withType(JavaCompile) {
 	options.encoding = 'UTF-8'
 	options.compilerArgs += ['-parameters']
+	options.compilerArgs += ['-Xlint:unchecked', '-Xlint:deprecation']
 }
 
 // Кеширование для ускорения сборки
@@ -50,6 +60,30 @@ configurations.all {
 tasks.named('test') { 
 	useJUnitPlatform()
 	maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
+}
+
+// Проверка стиля кода (временно отключено)
+// checkstyle {
+// 	toolVersion = '10.12.5'
+// 	configFile = file("${rootDir}/config/checkstyle/checkstyle.xml")
+// 	configProperties = [
+// 		'baseDir': "${rootDir}"
+// 	]
+// }
+
+// Задача для очистки
+task cleanLogs(type: Delete) {
+	delete 'logs'
+	delete 'build'
+	delete '.gradle'
+}
+
+// Задача для проверки безопасности зависимостей
+task securityCheck {
+	doLast {
+		println "Проверка безопасности зависимостей..."
+		// Здесь можно добавить проверку через OWASP Dependency Check
+	}
 }
 
 

@@ -12,13 +12,13 @@ services:
       - BOT_TOKEN=${BOT_TOKEN}
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
       
+      # URL для загрузок
+      - UPLOAD_BASE_URL=${UPLOAD_BASE_URL}
+      
       # Предзагрузка моделей Whisper
       - WHISPER_PRELOAD_MODELS=medium
       - WHISPER_DEVICE=cpu
       - WHISPER_COMPUTE_TYPE=int8
-      
-      # Настройки JVM
-      - JAVA_OPTS=-Xmx2g -Xms512m -XX:+UseG1GC -XX:+UseContainerSupport
       
       # Настройки приложения
       - UPLOAD_DIR=/app/upload

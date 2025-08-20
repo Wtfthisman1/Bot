@@ -73,7 +73,7 @@ ENV UPLOAD_DIR=/app/upload
 ENV APP_STORAGE_BASE=/app/upload/videos
 ENV XDG_CACHE_HOME=/app/.cache
 ENV HF_HOME=/app/.cache/huggingface
-ENV JAVA_OPTS="-Xmx2g -Xms512m -XX:+UseG1GC -XX:+UseContainerSupport"
+ENV JAVA_OPTS="-XX:+UseContainerSupport"
 ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 
 # Тома
