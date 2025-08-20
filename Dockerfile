@@ -52,5 +52,28 @@ COPY .env* ./
 RUN chmod +x pythonScript/*.py
 
 # === STAGE 4: Final runtime ===
+FROM base AS runtime
+
+# Копируем все из предыдущих stages
+COPY --from=base /usr/local/lib/python3.*/dist-packages /usr/local/lib/python3.*/dist-packages/
+COPY --from=base /app/.cache /app/.cache/
+COPY --from=base /app/upload /app/upload/
+COPY --from=base /app/logs /app/logs/
+
+# Переменные среды
+ENV UPLOAD_DIR=/app/upload
+ENV APP_STORAGE_BASE=/app/upload/videos
+ENV XDG_CACHE_HOME=/app/.cache
+ENV HF_HOME=/app/.cache/huggingface
+ENV JAVA_OPTS="-Xmx2g -Xms512m -XX:+UseG1GC -XX:+UseContainerSupport"
+
+# Тома
+VOLUME ["/app/upload", "/app/logs", "/app/.cache"]
+
+# Порт и healthcheck
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:8080/actuator/health || exit 1
+
 # Точка входа
 ENTRYPOINT ["./docker-entrypoint.sh"]
