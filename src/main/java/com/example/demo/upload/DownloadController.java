@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/download")
@@ -20,17 +22,44 @@ import java.nio.file.Path;
 public class DownloadController {
 
     private final StorageManager storageManager;
+    
+    // Хранилище для сопоставления коротких ID с файлами
+    private final Map<String, Path> shortIdToFile = new ConcurrentHashMap<>();
+    
+    /**
+     * Регистрирует файл с коротким ID
+     */
+    public void registerFile(String shortId, Path filePath) {
+        shortIdToFile.put(shortId, filePath);
+        log.info("Зарегистрирован файл: shortId={}, filePath={}", shortId, filePath);
+    }
 
     /**
-     * Скачивание файла по имени
+     * Скачивание файла по имени или короткому ID
      */
     @GetMapping("/{fileName:.+}")
     public ResponseEntity<Resource> downloadFile(@PathVariable String fileName) {
         try {
-            // Находим файл в хранилище
-            Path filePath = storageManager.findFile(fileName);
+            Path filePath = null;
+            
+            // Сначала проверяем, является ли это коротким ID
+            if (shortIdToFile.containsKey(fileName)) {
+                filePath = shortIdToFile.get(fileName);
+                log.info("Найден файл по короткому ID: id={}, filePath={}", fileName, filePath);
+            } else {
+                // Пробуем найти по имени файла (для обратной совместимости)
+                try {
+                    String decodedFileName = java.net.URLDecoder.decode(fileName, "UTF-8");
+                    log.info("Запрос на скачивание файла: original={}, decoded={}", fileName, decodedFileName);
+                    
+                    filePath = storageManager.findFile(decodedFileName);
+                } catch (Exception e) {
+                    log.warn("Ошибка декодирования имени файла: {}", fileName, e);
+                }
+            }
+            
             if (filePath == null || !filePath.toFile().exists()) {
-                log.warn("Файл не найден: {}", fileName);
+                log.warn("Файл не найден: fileName={}", fileName);
                 return ResponseEntity.notFound().build();
             }
 
@@ -42,7 +71,10 @@ public class DownloadController {
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(contentType))
                     .header(HttpHeaders.CONTENT_DISPOSITION, 
-                            "attachment; filename=\"" + fileName + "\"")
+                            "attachment; filename=\"" + filePath.getFileName() + "\"")
+                    .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                    .header(HttpHeaders.PRAGMA, "no-cache")
+                    .header(HttpHeaders.EXPIRES, "0")
                     .body(resource);
                     
         } catch (IOException e) {

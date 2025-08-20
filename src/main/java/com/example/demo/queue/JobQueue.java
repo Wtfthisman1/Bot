@@ -24,4 +24,20 @@ public class JobQueue {
                 .filter(job -> job.chatId() == chatId)
                 .collect(Collectors.toList());
     }
+    
+    /**
+     * Получает все задачи пользователя (включая обрабатываемые)
+     */
+    public List<ProcessingJob> getAllUserJobs(long chatId) {
+        return q.stream()
+                .filter(job -> job.chatId() == chatId)
+                .collect(Collectors.toList());
+    }
+    
+    /**
+     * Удаляет задачу из очереди
+     */
+    public boolean remove(ProcessingJob job) {
+        return q.remove(job);
+    }
 }

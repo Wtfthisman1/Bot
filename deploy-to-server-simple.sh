@@ -73,13 +73,12 @@ deploy() {
     
     # 1. Настройка сервера
     log "Шаг 1: Настройка сервера..."
-    run_on_server "wget -O server-setup.sh https://raw.githubusercontent.com/Wtfthisman1/Bot/main/server-setup.sh"
-    run_on_server "chmod +x server-setup.sh"
-    run_on_server "./server-setup.sh"
+    run_on_server "apt-get update && apt-get install -y docker.io docker-compose curl wget git"
+    run_on_server "systemctl enable docker && systemctl start docker"
     
     # 2. Клонирование репозитория
     log "Шаг 2: Клонирование репозитория..."
-    run_on_server "cd /root && git clone https://github.com/Wtfthisman1/Bot.git Bot"
+    run_on_server "cd /root && rm -rf Bot && git clone https://github.com/Wtfthisman1/Bot.git Bot"
     run_on_server "cd /root/Bot"
     
     # 3. Создание .env файла
@@ -109,7 +108,7 @@ deploy() {
     log "Логи: ssh $SERVER_USER@$SERVER_IP 'cd /root/Bot && ./deploy.sh logs'"
 }
 
-    # Функция обновления
+# Функция обновления
 update() {
     log "Обновление приложения..."
     run_on_server "cd /root/Bot && git pull origin master"
@@ -174,3 +173,4 @@ main() {
 }
 
 main "$@"
+

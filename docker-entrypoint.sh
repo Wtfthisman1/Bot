@@ -45,17 +45,19 @@ else
 fi
 
 # Проверяем доступность JAR файла
-if [[ ! -f /app/app.jar ]]; then
-    log "ERROR: app.jar не найден"
+JAR_FILE=$(find /app/libs -name "*.jar" | head -1)
+if [[ -z "$JAR_FILE" ]]; then
+    log "ERROR: JAR файл не найден в /app/libs/"
     exit 1
 fi
+log "Найден JAR файл: $JAR_FILE"
 
 # Настройки JVM для контейнера
 export JAVA_OPTS="${JAVA_OPTS:-} -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
 
 # Запуск приложения
 log "Запуск Spring Boot приложения..."
-exec java $JAVA_OPTS -jar /app/app.jar \
+exec java $JAVA_OPTS -jar "$JAR_FILE" \
     --upload.dir="${UPLOAD_DIR:-/app/upload}" \
     --app.storage.base="${APP_STORAGE_BASE:-/app/upload/videos}"
 

@@ -5,6 +5,7 @@ import com.example.demo.service.DownloaderExecutor;
 import com.example.demo.service.MessageSender;
 import com.example.demo.service.TranscribeExecutor;
 import com.example.demo.service.DownloadService;
+import com.example.demo.service.StatusService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class JobWorker implements Runnable {
     private final TranscribeExecutor transcriber;
     private final MessageSender messageSender;
     private final DownloadService downloadService;
+    private final StatusService statusService;
 
     private volatile boolean running = true;
     private Thread worker;
@@ -44,9 +46,18 @@ public class JobWorker implements Runnable {
         while (running) {
             try {
                 ProcessingJob job = queue.take();   // блокируемся
-                switch (job.state()) {
-                    case NEW        -> download(job);
-                    case DOWNLOADED -> transcribe(job);
+                
+                // Отмечаем задачу как активную
+                statusService.markJobActive(job);
+                
+                try {
+                    switch (job.state()) {
+                        case NEW        -> download(job);
+                        case DOWNLOADED -> transcribe(job);
+                    }
+                } finally {
+                    // Отмечаем задачу как завершенную
+                    statusService.markJobCompleted(job.id());
                 }
             } catch (InterruptedException ie) {
                 if (!running) break;   // нормальный shutdown
@@ -61,12 +72,14 @@ public class JobWorker implements Runnable {
     private void download(ProcessingJob job) {
         try {
             Path file = downloader.download(job.chatId(), job.url());
-            log.info("Скачано {}", file);
+            log.info("Скачано {} (downloadId: {})", file, job.downloadId());
             
             // Проверяем, является ли это задачей загрузки
             if (job.downloadId() != null) {
+                log.info("Обрабатываю задачу загрузки с downloadId: {}", job.downloadId());
                 downloadService.handleDownloadComplete(job.downloadId(), file);
             } else {
+                log.info("Обрабатываю обычную задачу транскрибирования");
                 // Обычная задача транскрибирования
                 queue.enqueue(job.withFile(file));
             }

@@ -40,7 +40,7 @@ torch.set_num_threads(NUM_THREADS)
 
 # ───────────────────────── аргументы ──────────────────────────
 if len(sys.argv) != 3:
-    sys.stderr.write("Usage: transcribe.py <videoPath> <transcriptPath>\n")
+    sys.stderr.write("Usage: Transcribe.py <videoPath> <transcriptPath>\n")
     sys.exit(1)
 
 in_path    = Path(sys.argv[1]).expanduser().resolve()
@@ -48,7 +48,7 @@ out_prefix = Path(sys.argv[2]).expanduser().resolve()
 wav_path   = out_prefix.with_suffix(".wav")
 
 if not in_path.exists():
-    sys.stderr.write(f"[transcribe.py] input file not found: {in_path}\n")
+    sys.stderr.write(f"[Whisper.py] input file not found: {in_path}\n")
     sys.exit(2)
 
 out_prefix.parent.mkdir(parents=True, exist_ok=True)

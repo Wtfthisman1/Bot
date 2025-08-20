@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   bot:
     build: 
@@ -27,6 +25,9 @@ services:
       - APP_STORAGE_BASE=/app/upload/videos
       - XDG_CACHE_HOME=/app/.cache
       - HF_HOME=/app/.cache/huggingface
+      # Пути к Python скриптам для Docker
+      - WHISPER_SCRIPT=/app/pythonScript/Transcribe.py
+      - DOWNLOADER_SCRIPT=/app/pythonScript/Downloader.py
     volumes:
       # Пользовательские файлы
       - ./upload:/app/upload
@@ -41,14 +42,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '0.5'
     networks:
       - bot-network
 

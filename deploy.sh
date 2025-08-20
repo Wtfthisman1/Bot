@@ -25,8 +25,14 @@ warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
+# Загрузка .env файла если существует
+if [[ -f ".env" ]]; then
+    log "Загружаю переменные из .env файла..."
+    export $(grep -v '^#' .env | xargs)
+fi
+
 # Конфигурация
-IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY:-your-username/your-repo}"
+IMAGE_NAME="ghcr.io/wtfthisman1/bot"
 COMPOSE_FILE="docker-compose.prod.yml"
 
 # Проверка переменных окружения
@@ -48,12 +54,12 @@ check_env() {
 # Функция обновления образа
 update_image() {
     local tag=${1:-latest}
-    log "Обновление образа ${IMAGE_NAME}:${tag}..."
+    log "Сборка образа bot:${tag}..."
     
-    if docker pull "${IMAGE_NAME}:${tag}"; then
-        success "Образ обновлен успешно"
+    if docker-compose -f "$COMPOSE_FILE" build; then
+        success "Образ собран успешно"
     else
-        error "Не удалось обновить образ"
+        error "Не удалось собрать образ"
         exit 1
     fi
 }

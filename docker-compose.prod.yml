@@ -1,9 +1,10 @@
-version: '3.8'
-
 services:
   bot:
-    # Используем образ из registry
-    image: ghcr.io/${GITHUB_REPOSITORY:-Wtfthisman1/Bot}:${IMAGE_TAG:-latest}
+    # Собираем образ локально
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bot:latest
     container_name: telegram-bot
     ports:
       - "8080:8080"
@@ -11,6 +12,10 @@ services:
       # Обязательные переменные (устанавливаются на сервере)
       - BOT_TOKEN=${BOT_TOKEN}
       - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
+      
+      # URL для загрузки и скачивания файлов
+      - UPLOAD_BASE_URL=${UPLOAD_BASE_URL:-http://localhost:8080}
+      - DOWNLOAD_BASE_URL=${DOWNLOAD_BASE_URL:-http://localhost:8080}
       
       # Опционально: предзагрузить модели при старте
       # - WHISPER_PRELOAD_MODELS=small,medium
