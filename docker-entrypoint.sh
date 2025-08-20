@@ -45,7 +45,14 @@ else
 fi
 
 # Проверяем доступность JAR файла
-JAR_FILE=$(find /app/libs -name "*.jar" | head -1)
+if [[ -f "/app/libs/bot.jar" ]]; then
+    JAR_FILE="/app/libs/bot.jar"
+elif [[ -f "/app/libs/demo.jar" ]]; then
+    JAR_FILE="/app/libs/demo.jar"
+else
+    JAR_FILE=$(find /app/libs -name "*.jar" | head -1)
+fi
+
 if [[ -z "$JAR_FILE" ]]; then
     log "ERROR: JAR файл не найден в /app/libs/"
     exit 1
