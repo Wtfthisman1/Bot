@@ -34,13 +34,13 @@ COPY whisper_preload.py .
 ARG CACHEBUST=1
 ARG BUILD_DATE=unknown
 
-# Копируем Python скрипты (обновляются при каждой сборке)
-COPY src/main/resources/pythonScript/ ./pythonScript/
-
 # Копируем конфигурацию (обновляется при каждой сборке)
 COPY docker-compose.yml .
 COPY docker-entrypoint.sh .
 RUN chmod +x docker-entrypoint.sh
+
+# Копируем Python скрипты (обновляются при каждой сборке)
+COPY src/main/resources/pythonScript/ ./pythonScript/
 
 # Копируем JAR файлы (обновляются при каждой сборке)
 COPY build/libs/ ./libs/
@@ -54,11 +54,15 @@ RUN chmod +x pythonScript/*.py
 # === STAGE 4: Final runtime ===
 FROM base AS runtime
 
-# Копируем все из предыдущих stages
+# Копируем все из base stage
 COPY --from=base /usr/local/lib/python3.*/dist-packages /usr/local/lib/python3.*/dist-packages/
 COPY --from=base /app/.cache /app/.cache/
 COPY --from=base /app/upload /app/upload/
 COPY --from=base /app/logs /app/logs/
+COPY --from=base /app/pythonScript /app/pythonScript/
+COPY --from=base /app/docker-compose.yml /app/docker-compose.yml
+COPY --from=base /app/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --from=base /app/libs /app/libs/
 
 # Переменные среды
 ENV UPLOAD_DIR=/app/upload
