@@ -7,7 +7,7 @@ FROM python:3.11-slim as base
 
 # Устанавливаем Java и системные зависимости
 RUN apt-get update && apt-get install -y \
-    openjdk-17-jre-headless \
+    openjdk-21-jre-headless \
     ffmpeg \
     git \
     curl \
@@ -74,6 +74,7 @@ ENV APP_STORAGE_BASE=/app/upload/videos
 ENV XDG_CACHE_HOME=/app/.cache
 ENV HF_HOME=/app/.cache/huggingface
 ENV JAVA_OPTS="-Xmx2g -Xms512m -XX:+UseG1GC -XX:+UseContainerSupport"
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 
 # Тома
 VOLUME ["/app/upload", "/app/logs", "/app/.cache"]
