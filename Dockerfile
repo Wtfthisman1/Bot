@@ -3,12 +3,11 @@
 ###############################################################################
 
 # === STAGE 1: Base ===
-FROM openjdk:17-jdk-slim as base
+FROM python:3.11-slim as base
 
-# Устанавливаем системные зависимости
+# Устанавливаем Java и системные зависимости
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
+    openjdk-17-jre-headless \
     ffmpeg \
     git \
     curl \
@@ -20,7 +19,8 @@ WORKDIR /app
 # === STAGE 2: Python dependencies (КЕШИРУЕМЫЕ) ===
 # Устанавливаем Python зависимости (кешируем)
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/tmp/pip-cache \
+    pip install -r requirements.txt
 
 # Создаем директории для кеша и загрузок
 RUN mkdir -p /app/upload /app/logs /app/.cache/huggingface
@@ -50,6 +50,10 @@ COPY .env* ./
 
 # Устанавливаем права на скрипты
 RUN chmod +x pythonScript/*.py
+
+# Создаем симлинки для совместимости
+RUN ln -sf /usr/local/bin/python /usr/bin/python3 && \
+    ln -sf /usr/local/bin/pip /usr/bin/pip3
 
 # === STAGE 4: Final runtime ===
 FROM base AS runtime
