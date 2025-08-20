@@ -1,5 +1,4 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
 
 # Цвета для вывода
 RED='\033[0;31m'
@@ -8,202 +7,149 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Функция логирования
+# Функции для логирования
 log() {
-    echo -e "${BLUE}[$(date '+%H:%M:%S')]${NC} $1"
-}
-
-error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
 }
 
 success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+error() {
+    echo -e "${RED}❌ $1${NC}"
 }
 
 warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}⚠️  $1${NC}"
 }
 
-# Загрузка .env файла если существует
-if [[ -f ".env" ]]; then
-    log "Загружаю переменные из .env файла..."
-    export $(grep -v '^#' .env | xargs)
+# Проверяем, что мы в Git репозитории
+if [ ! -d ".git" ]; then
+    error "Не найден Git репозиторий. Запустите скрипт из корня проекта."
+    exit 1
 fi
 
-# Конфигурация
-IMAGE_NAME="ghcr.io/wtfthisman1/bot"
-COMPOSE_FILE="docker-compose.prod.yml"
+# Проверяем, что есть изменения для коммита
+if git diff-index --quiet HEAD --; then
+    warning "Нет изменений для коммита. Продолжаем с текущим состоянием."
+else
+    log "🔍 Обнаружены изменения в коде..."
+    
+    # Добавляем все изменения
+    log "📝 Добавляем изменения в Git..."
+    git add .
+    
+    # Коммитим изменения
+    log "💾 Создаем коммит..."
+    git commit -m "Auto-deploy: $(date +'%Y-%m-%d %H:%M:%S')"
+    
+    success "Изменения закоммичены"
+fi
 
-# Проверка переменных окружения
-check_env() {
-    if [[ -z "${BOT_TOKEN:-}" ]]; then
-        error "BOT_TOKEN не установлен"
-        exit 1
-    fi
-    
-    if [[ -z "${ADMIN_CHAT_ID:-}" ]]; then
-        warning "ADMIN_CHAT_ID не установлен"
-    fi
-    
-    if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
-        warning "GITHUB_REPOSITORY не установлен, используется значение по умолчанию"
-    fi
+# Шаг 1: Сборка bootJar
+log "🔨 Собираем bootJar..."
+if ./gradlew bootJar; then
+    success "bootJar собран успешно"
+else
+    error "Ошибка при сборке bootJar"
+    exit 1
+fi
+
+# Шаг 2: Проверяем, что JAR файл создан
+JAR_FILE="build/libs/bot.jar"
+if [ ! -f "$JAR_FILE" ]; then
+    error "JAR файл не найден: $JAR_FILE"
+    exit 1
+fi
+
+success "JAR файл готов: $JAR_FILE"
+
+# Шаг 3: Пушим в Git
+log "📤 Пушим изменения в Git..."
+if git push; then
+    success "Изменения запушены в Git"
+else
+    error "Ошибка при пуше в Git"
+    exit 1
+fi
+
+# Шаг 4: Деплой на сервер
+log "🚀 Начинаем деплой на сервер..."
+
+# Функция для выполнения команд на сервере
+run_on_server() {
+    sshpass -p "REDACTED_PASSWORD" ssh -o StrictHostKeyChecking=no root@REDACTED_IP "$1"
 }
 
-# Функция обновления образа
-update_image() {
-    local tag=${1:-latest}
-    log "Сборка образа bot:${tag}..."
-    
-    if docker-compose -f "$COMPOSE_FILE" build; then
-        success "Образ собран успешно"
-    else
-        error "Не удалось собрать образ"
-        exit 1
-    fi
-}
+# Проверяем подключение к серверу
+log "🔌 Проверяем подключение к серверу..."
+if ! run_on_server "echo 'Connection test'"; then
+    error "Не удается подключиться к серверу"
+    exit 1
+fi
 
-# Функция развертывания
-deploy() {
-    local tag=${1:-latest}
-    
-    log "Развертывание версии ${tag}..."
-    
-    # Останавливаем текущий контейнер
-    log "Остановка текущего контейнера..."
-    docker-compose -f "$COMPOSE_FILE" down || true
-    
-    # Обновляем образ
-    update_image "$tag"
-    
-    # Запускаем новый контейнер
-    log "Запуск нового контейнера..."
-    IMAGE_TAG="$tag" docker-compose -f "$COMPOSE_FILE" up -d
-    
-    # Ждем готовности
-    log "Ожидание готовности приложения..."
-    sleep 30
-    
-    # Проверяем health
-    if curl -f http://localhost:8080/actuator/health > /dev/null 2>&1; then
-        success "Приложение успешно развернуто!"
-        log "Health check: http://localhost:8080/actuator/health"
-    else
-        warning "Приложение может быть еще не готово. Проверьте логи:"
-        log "docker-compose -f $COMPOSE_FILE logs -f bot"
-    fi
-}
+success "Подключение к серверу установлено"
 
-# Функция отката
-rollback() {
-    local previous_tag=${1:-latest}
-    log "Откат к версии ${previous_tag}..."
-    deploy "$previous_tag"
-}
+# Шаг 5: Останавливаем и удаляем старые контейнеры
+log "🛑 Останавливаем старые контейнеры..."
+if run_on_server "cd /root/Bot && docker-compose down"; then
+    success "Старые контейнеры остановлены"
+else
+    warning "Не удалось остановить контейнеры (возможно, их не было)"
+fi
 
-# Функция логи
-logs() {
-    docker-compose -f "$COMPOSE_FILE" logs -f bot
-}
+# Шаг 6: Удаляем старые образы (кроме базовых)
+log "🗑️  Удаляем старые образы..."
+if run_on_server "docker images | grep 'bot' | awk '{print \$3}' | xargs -r docker rmi -f"; then
+    success "Старые образы удалены"
+else
+    warning "Не удалось удалить образы (возможно, их не было)"
+fi
 
-# Функция статуса
-status() {
-    log "Статус контейнеров:"
-    docker-compose -f "$COMPOSE_FILE" ps
-    
-    log "Использование ресурсов:"
-    docker stats --no-stream || true
-    
-    log "Health check:"
-    curl -s http://localhost:8080/actuator/health | jq . 2>/dev/null || curl -s http://localhost:8080/actuator/health
-}
+# Шаг 7: Делаем pull на сервере
+log "📥 Обновляем код на сервере..."
+if run_on_server "cd /root/Bot && git pull"; then
+    success "Код обновлен на сервере"
+else
+    error "Ошибка при обновлении кода на сервере"
+    exit 1
+fi
 
-# Функция очистки
-cleanup() {
-    log "Очистка неиспользуемых образов..."
-    docker image prune -f
-    
-    log "Очистка неиспользуемых томов..."
-    docker volume prune -f
-}
+# Шаг 8: Собираем Docker с оптимизированным кешированием
+log "🔨 Собираем Docker образ с оптимизированным кешированием..."
+if run_on_server "cd /root/Bot && docker-compose build --build-arg CACHEBUST=$(date +%s) --build-arg BUILD_DATE=$(date +%s)"; then
+    success "Docker образ собран"
+else
+    error "Ошибка при сборке Docker образа"
+    exit 1
+fi
 
-# Функция предзагрузки моделей
-preload_models() {
-    local models=${1:-"small,medium"}
-    log "Предзагрузка моделей: $models"
-    
-    # Останавливаем если запущен
-    docker-compose -f "$COMPOSE_FILE" down 2>/dev/null || true
-    
-    # Запускаем с предзагрузкой
-    WHISPER_PRELOAD_MODELS="$models" docker-compose -f "$COMPOSE_FILE" up -d
-    
-    log "Ожидание завершения предзагрузки..."
-    sleep 60
-    
-    # Проверяем логи
-    if docker-compose -f "$COMPOSE_FILE" logs bot | grep -q "Предзагрузка моделей завершена успешно"; then
-        success "Модели предзагружены успешно"
-    else
-        warning "Предзагрузка может быть еще в процессе. Проверьте логи:"
-        log "docker-compose -f $COMPOSE_FILE logs bot"
-    fi
-}
+# Шаг 9: Запускаем контейнеры
+log "🚀 Запускаем контейнеры..."
+if run_on_server "cd /root/Bot && docker-compose up -d"; then
+    success "Контейнеры запущены"
+else
+    error "Ошибка при запуске контейнеров"
+    exit 1
+fi
 
-# Главная функция
-main() {
-    case "${1:-help}" in
-        "deploy")
-            check_env
-            deploy "${2:-latest}"
-            ;;
-        "rollback")
-            check_env
-            rollback "$2"
-            ;;
-        "update")
-            check_env
-            update_image "${2:-latest}"
-            ;;
-        "logs")
-            logs
-            ;;
-        "status")
-            status
-            ;;
-        "cleanup")
-            cleanup
-            ;;
-        "preload")
-            preload_models "$2"
-            ;;
-        "help"|*)
-            echo "Использование: $0 {deploy|rollback|update|logs|status|cleanup|preload|help}"
-            echo ""
-            echo "Команды:"
-            echo "  deploy [tag]   - Развернуть приложение (по умолчанию latest)"
-            echo "  rollback [tag] - Откатиться к предыдущей версии"
-            echo "  update [tag]   - Обновить образ без перезапуска"
-            echo "  logs           - Показать логи"
-            echo "  status         - Показать статус и метрики"
-            echo "  cleanup        - Очистить неиспользуемые ресурсы"
-            echo "  preload [models] - Предзагрузить модели (например: $0 preload small,medium)"
-            echo "  help           - Показать эту справку"
-            echo ""
-            echo "Переменные окружения:"
-            echo "  BOT_TOKEN          - Токен Telegram бота (обязательно)"
-            echo "  ADMIN_CHAT_ID      - ID чата администратора"
-            echo "  GITHUB_REPOSITORY  - GitHub репозиторий (например: username/repo)"
-            echo ""
-            echo "Примеры:"
-            echo "  $0 deploy                    # Развернуть latest версию"
-            echo "  $0 deploy v1.2.3             # Развернуть конкретную версию"
-            echo "  $0 rollback v1.2.2           # Откатиться к версии"
-            echo "  $0 preload small,medium      # Предзагрузить модели"
-            echo "  $0 status                    # Проверить статус"
-            ;;
-    esac
-}
+# Шаг 10: Проверяем статус
+log "🔍 Проверяем статус контейнеров..."
+sleep 5
+if run_on_server "docker-compose ps"; then
+    success "Статус контейнеров получен"
+else
+    error "Ошибка при получении статуса контейнеров"
+fi
 
-main "$@"
+# Шаг 11: Проверяем логи
+log "📋 Проверяем логи запуска..."
+if run_on_server "docker logs telegram-bot --tail 10"; then
+    success "Логи получены"
+else
+    error "Ошибка при получении логов"
+fi
+
+success "🎉 Деплой завершен успешно!"
+log "Бот должен быть доступен и готов к работе"

@@ -41,8 +41,11 @@ public class TranscribeExecutor {
         if (!Files.exists(video))
             throw new IOException("Видеофайл не найден: " + video);
 
+        log.info("Начинаю транскрипцию: chatId={}, video={}", chatId, video);
+
         /* 1. где лежит скрипт */
         String script = resolveScript(scriptPath);
+        log.info("Скрипт транскрипции: {}", script);
 
         /* 2. куда писать результат */
         String baseName = video.getFileName().toString()
@@ -52,6 +55,8 @@ public class TranscribeExecutor {
         Files.createDirectories(txtFile.getParent());
 
         /* 3. запуск: python Transcribe.py <video> <out.txt> */
+        log.info("Запускаю процесс: python3 {} {} {}", script, video.toString(), txtFile.toString());
+        
         ProcessBuilder pb = new ProcessBuilder(
                 "python3", script,
                 video.toString(),
@@ -59,6 +64,7 @@ public class TranscribeExecutor {
                 .redirectErrorStream(false);        // хотим stderr отдельно
 
         Process proc = pb.start();
+        log.info("Процесс запущен, PID: {}", proc.pid());
 
         StringBuilder errBuf = new StringBuilder();
 
@@ -76,11 +82,14 @@ public class TranscribeExecutor {
             errBuf.append(ln).append('\n');
         });
 
+        log.info("Ожидаю завершения процесса (таймаут: {} минут)...", TIMEOUT.toMinutes());
         boolean ok = proc.waitFor(TIMEOUT.toMinutes(), TimeUnit.MINUTES);
         if (!ok) {
+            log.error("Процесс не завершился за {} минут, принудительно завершаю", TIMEOUT.toMinutes());
             proc.destroyForcibly();
             throw new RuntimeException("Faster-Whisper timeout > " + TIMEOUT);
         }
+        log.info("Процесс завершился с кодом: {}", proc.exitValue());
 
         tOut.join();  tErr.join();
 
