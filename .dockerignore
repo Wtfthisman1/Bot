@@ -68,7 +68,6 @@ upload/
 
 # Docker
 Dockerfile*
-docker-compose*.yml
 .dockerignore
 
 # Other
