@@ -27,11 +27,21 @@ run_on_server() {
     
     log "Выполняем команду на сервере (таймаут: ${timeout}s)..."
     
-    # Используем timeout для предотвращения зависания
+    # Сначала пробуем с SSH ключами, если не получится - с паролем
+    if timeout $timeout ssh \
+        -o StrictHostKeyChecking=no \
+        -o ConnectTimeout=20 \
+        -o ServerAliveInterval=60 \
+        -o ServerAliveCountMax=3 \
+        "$SERVER_USER@$SERVER_HOST" "$cmd" 2>/dev/null; then
+        return 0
+    fi
+    
+    # Если SSH ключи не работают, используем пароль
     timeout $timeout sshpass -p "$SERVER_PASS" ssh \
         -o StrictHostKeyChecking=no \
-        -o ConnectTimeout=10 \
-        -o ServerAliveInterval=30 \
+        -o ConnectTimeout=20 \
+        -o ServerAliveInterval=60 \
         -o ServerAliveCountMax=3 \
         "$SERVER_USER@$SERVER_HOST" "$cmd"
     
@@ -52,10 +62,12 @@ check_server_connection() {
         error "Сервер недоступен (ping не проходит)"
     fi
     
-    # Затем проверяем SSH
-    if ! timeout 10 sshpass -p "$SERVER_PASS" ssh \
+    # Затем проверяем SSH с увеличенными таймаутами
+    if ! timeout 30 sshpass -p "$SERVER_PASS" ssh \
         -o StrictHostKeyChecking=no \
-        -o ConnectTimeout=5 \
+        -o ConnectTimeout=20 \
+        -o ServerAliveInterval=60 \
+        -o ServerAliveCountMax=3 \
         "$SERVER_USER@$SERVER_HOST" "echo 'SSH connection OK'" > /dev/null 2>&1; then
         error "SSH подключение не работает"
     fi
