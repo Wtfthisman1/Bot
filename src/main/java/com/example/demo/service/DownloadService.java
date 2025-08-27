@@ -33,6 +33,13 @@ public class DownloadService {
         } else {
             log.info("DownloadService инициализирован с downloadBaseUrl из properties: {}", downloadBaseUrl);
         }
+        
+        // Убираем trailing slash если есть
+        if (downloadBaseUrl.endsWith("/")) {
+            downloadBaseUrl = downloadBaseUrl.substring(0, downloadBaseUrl.length() - 1);
+        }
+        
+        log.info("Final downloadBaseUrl: {}", downloadBaseUrl);
         log.info("DOWNLOAD_BASE_URL из env: {}", System.getenv("DOWNLOAD_BASE_URL"));
     }
     
@@ -96,6 +103,14 @@ public class DownloadService {
             log.info("Обрабатываю завершенную загрузку: downloadId={}, fileName={}, downloadLink={}", 
                     downloadId, filePath.getFileName(), downloadLink);
             
+            // Проверяем, что ссылка не пустая
+            if (downloadLink == null || downloadLink.isEmpty()) {
+                log.error("downloadLink is null or empty for downloadId: {}", downloadId);
+                messageSender.sendMessage(info.chatId(), 
+                    "❌ Ошибка: не удалось сгенерировать ссылку для скачивания");
+                return;
+            }
+            
             String message = """
                 ✅ <b>Загрузка завершена!</b>
                 
@@ -157,6 +172,13 @@ public class DownloadService {
             String link = downloadBaseUrl + "/download/" + shortId;
             log.info("Генерирую ссылку для скачивания: baseUrl={}, fileName={}, shortId={}, link={}", 
                     downloadBaseUrl, filePath.getFileName(), shortId, link);
+            
+            // Проверяем, что ссылка корректная
+            if (link == null || link.isEmpty()) {
+                log.error("Generated link is null or empty for fileName: {}", filePath.getFileName());
+                throw new RuntimeException("Failed to generate download link");
+            }
+            
             return link;
         } catch (Exception e) {
             log.error("Ошибка генерации ссылки для файла: {}", filePath.getFileName(), e);
