@@ -97,13 +97,13 @@ public class DownloadService {
                     downloadId, filePath.getFileName(), downloadLink);
             
             String message = """
-                ✅ Загрузка завершена!
+                ✅ <b>Загрузка завершена!</b>
                 
-                📁 Файл: %s
-                📏 Размер: %s
-                👤 Пользователь: %s
+                📁 <b>Файл:</b> %s
+                📏 <b>Размер:</b> %s
+                👤 <b>Пользователь:</b> %s
                 
-                🔗 Скачать файл: %s
+                🔗 <a href="%s">Скачать файл</a>
                 
                 ⏰ Ссылка действительна 24 часа
                 """.formatted(
@@ -114,7 +114,7 @@ public class DownloadService {
                 );
             
             log.info("Отправляю сообщение пользователю {}: {}", info.chatId(), message);
-            messageSender.sendMessage(info.chatId(), message);
+            messageSender.sendMessage(info.chatId(), message, "HTML");
             
             // Удаляем информацию о загрузке
             downloads.remove(downloadId);
