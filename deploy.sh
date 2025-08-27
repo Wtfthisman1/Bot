@@ -19,7 +19,7 @@ SERVER_USER=${SERVER_USER:-"root"}
 SERVER_PASS=${SERVER_PASS:-"REDACTED_PASSWORD"}
 
 run_on_server() {
-    sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no "$SERVER_USER@$SERVER_HOST" "$1"
+    sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 "$SERVER_USER@$SERVER_HOST" "$1"
 }
 
 # 1. Собираем bootJar
