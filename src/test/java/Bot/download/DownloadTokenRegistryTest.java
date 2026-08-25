@@ -1,9 +1,23 @@
 package Bot.download;
 
+/**
+ * Ссылки на скачивание: срок годности, исчезнувший файл и — главное —
+ * выживание после перезапуска бота. Ради последнего реестр и переехал в базу,
+ * поэтому тест идёт в настоящий Postgres.
+ */
+import Bot.owner.Owner;
+import Bot.support.PostgresTestContainer;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,32 +25,42 @@ import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import({PostgresTestContainer.class, DownloadTokenRegistry.class})
+// Без общей транзакции теста: «пережил рестарт» проверяется только тем,
+// что запись реально попала в базу, а не висит в незакрытой транзакции
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
 class DownloadTokenRegistryTest {
+
+    private static final Owner OWNER = Owner.telegram(1L);
 
     @TempDir Path tmp;
 
-    private Path store;
+    @Autowired DownloadTokenRegistry registry;
+    @Autowired DownloadTokenRepository repository;
+
     private Path file;
 
     @BeforeEach
     void setUp() throws IOException {
-        store = tmp.resolve("tokens.tsv");
         file = Files.writeString(tmp.resolve("video.mp4"), "data");
+        withTtl(24);
     }
 
-    private DownloadTokenRegistry registry(int ttlHours) {
-        DownloadTokenRegistry registry = new DownloadTokenRegistry();
-        ReflectionTestUtils.setField(registry, "ttlHours", ttlHours);
-        ReflectionTestUtils.setField(registry, "storePath", store.toString());
-        ReflectionTestUtils.invokeMethod(registry, "load");
-        return registry;
+    @AfterEach
+    void clean() {
+        repository.deleteAll();
+    }
+
+    /** Срок жизни ссылки — настройка, поэтому подменяем её как в конфиге. */
+    private void withTtl(int hours) {
+        ReflectionTestUtils.setField(registry, "ttlHours", hours);
     }
 
     @Test
     void registeredTokenResolvesToTheFile() {
-        DownloadTokenRegistry registry = registry(24);
-
-        String token = registry.register(file, 1L);
+        String token = registry.register(file, OWNER);
 
         assertThat(token).isNotBlank().matches("[A-Za-z0-9_-]+");
         assertThat(registry.resolve(token)).contains(file.toAbsolutePath().normalize());
@@ -44,28 +68,26 @@ class DownloadTokenRegistryTest {
 
     @Test
     void unknownTokenDoesNotResolve() {
-        assertThat(registry(24).resolve("nope")).isEmpty();
+        assertThat(registry.resolve("nope")).isEmpty();
     }
 
     @Test
     void tokensAreUnpredictableAndUnique() {
-        DownloadTokenRegistry registry = registry(24);
-        assertThat(registry.register(file, 1L)).isNotEqualTo(registry.register(file, 1L));
+        assertThat(registry.register(file, OWNER)).isNotEqualTo(registry.register(file, OWNER));
     }
 
     @Test
     void expiredTokenIsRejected() {
-        DownloadTokenRegistry registry = registry(-1);
+        withTtl(-1);
 
-        String token = registry.register(file, 1L);
+        String token = registry.register(file, OWNER);
 
         assertThat(registry.resolve(token)).isEmpty();
     }
 
     @Test
     void deletedFileMakesTokenUnusable() throws IOException {
-        DownloadTokenRegistry registry = registry(24);
-        String token = registry.register(file, 1L);
+        String token = registry.register(file, OWNER);
 
         Files.delete(file);
 
@@ -75,17 +97,22 @@ class DownloadTokenRegistryTest {
     /** Ссылка обещает 24 часа — она обязана пережить рестарт бота. */
     @Test
     void tokenSurvivesRestart() {
-        String token = registry(24).register(file, 1L);
+        String token = registry.register(file, OWNER);
 
-        DownloadTokenRegistry afterRestart = registry(24);
+        // «Перезапуск»: у нового экземпляра нет никакого состояния в памяти
+        DownloadTokenRegistry afterRestart = new DownloadTokenRegistry(repository);
+        ReflectionTestUtils.setField(afterRestart, "ttlHours", 24);
 
         assertThat(afterRestart.resolve(token)).contains(file.toAbsolutePath().normalize());
     }
 
     @Test
-    void expiredEntriesAreDroppedOnRestart() {
-        String token = registry(-1).register(file, 1L);
+    void expiredEntriesAreSweptAway() {
+        withTtl(-1);
+        registry.register(file, OWNER);
 
-        assertThat(registry(24).resolve(token)).isEmpty();
+        registry.purgeExpired();
+
+        assertThat(repository.count()).isZero();
     }
 }

@@ -7,7 +7,7 @@ package Bot.transcription;
  * ним кнопки — субтитры и Word. Один проход Whisper уже кладёт {@code .srt},
  * {@code .vtt}, {@code .json} и {@code .tsv} рядом с текстом, так что субтитры
  * достаются без единой лишней секунды на видеокарте; отдать их — вопрос одной
- * кнопки. Связан с {@link TranscriptRegistry} (идентификаторы для кнопок),
+ * кнопки. Связан с {@link JobStore} (по задаче находится сама расшифровка),
  * {@link WordExporter} и {@link MessageSender}. Ключевые методы:
  * {@code deliver} и {@code sendFormat}.</p>
  *
@@ -15,6 +15,8 @@ package Bot.transcription;
  * расшифровки, сделанные до появления субтитров, соседних файлов не имеют, и
  * обещать их кнопкой значило бы врать.</p>
  */
+import Bot.owner.Owner;
+import Bot.processing.JobStore;
 import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -36,7 +39,7 @@ public class TranscriptDeliveryService {
     private static final List<TranscriptFormat> OFFERED =
             List.of(TranscriptFormat.SRT, TranscriptFormat.VTT, TranscriptFormat.DOCX);
 
-    private final TranscriptRegistry registry;
+    private final JobStore jobStore;
     private final WordExporter wordExporter;
     private final MessageSender messageSender;
 
@@ -45,7 +48,7 @@ public class TranscriptDeliveryService {
      *
      * @param txt файл, который вернул {@link TranscribeExecutor}
      */
-    public void deliver(long chatId, Path txt) {
+    public void deliver(UUID jobId, long chatId, Path txt) {
         List<TranscriptFormat> available = availableFormats(txt);
 
         if (available.isEmpty()) {
@@ -54,10 +57,10 @@ public class TranscriptDeliveryService {
             return;
         }
 
-        String id = registry.register(txt, chatId);
-        log.info("Расшифровка отправлена: chatId={}, id={}, доступно форматов={}",
-                chatId, id, available.size());
-        messageSender.sendTranscript(chatId, txt, Keyboards.transcriptFormats(id, available));
+        log.info("Расшифровка отправлена: chatId={}, jobId={}, доступно форматов={}",
+                chatId, jobId, available.size());
+        messageSender.sendTranscript(chatId, txt,
+                Keyboards.transcriptFormats(jobId.toString(), available));
     }
 
     /**
@@ -68,7 +71,7 @@ public class TranscriptDeliveryService {
      * объяснение и главное меню.</p>
      */
     public void sendFormat(long chatId, String id, TranscriptFormat format) {
-        Optional<TranscriptRegistry.Transcript> found = registry.resolve(id, chatId);
+        Optional<Path> found = transcript(chatId, id);
         if (found.isEmpty()) {
             messageSender.sendMessageWithKeyboard(chatId,
                     "🕓 Эта расшифровка больше недоступна — файлы хранятся ограниченное время. "
@@ -77,7 +80,7 @@ public class TranscriptDeliveryService {
             return;
         }
 
-        Path txt = found.get().txt();
+        Path txt = found.get();
         try {
             Path file = format == TranscriptFormat.DOCX ? wordExporter.export(txt) : format.fileFor(txt);
 
@@ -104,6 +107,25 @@ public class TranscriptDeliveryService {
     }
 
     /* ───────── helpers ───────── */
+
+    /**
+     * Находит расшифровку по идентификатору из кнопки.
+     *
+     * <p>Идентификатор — это id задачи. Нечитаемый id (кнопка из совсем старого
+     * сообщения) и чужая задача обрабатываются одинаково: расшифровки нет.
+     * Файл проверяется отдельно — его могла удалить ночная чистка.</p>
+     */
+    private Optional<Path> transcript(long chatId, String id) {
+        UUID jobId;
+        try {
+            jobId = UUID.fromString(id);
+        } catch (IllegalArgumentException e) {
+            log.warn("Неразбираемый идентификатор расшифровки: chatId={}, id='{}'", chatId, id);
+            return Optional.empty();
+        }
+        return jobStore.transcriptOf(jobId, Owner.telegram(chatId))
+                .filter(Files::isRegularFile);
+    }
 
     /**
      * Форматы, которые реально можно отдать: субтитры — если Whisper их положил,

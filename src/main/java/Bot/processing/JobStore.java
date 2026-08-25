@@ -133,6 +133,22 @@ public class JobStore {
         return repository.findByDownloadId(downloadId).map(JobStore::toDownload);
     }
 
+    /**
+     * Путь к расшифровке по задаче — если она принадлежит этому владельцу.
+     *
+     * <p>По нему кнопки под расшифровкой находят соседние форматы. Отдельного
+     * реестра для этого не нужно: задача и так знает, что получилось.
+     * Пустой результат означает «чужая задача, нет такой или файл ещё
+     * не готов» — все три случая для пользователя выглядят одинаково.</p>
+     */
+    @Transactional(readOnly = true)
+    public Optional<Path> transcriptOf(UUID jobId, Owner owner) {
+        return repository.findById(jobId)
+                .filter(entity -> entity.owner().equals(owner))
+                .map(JobEntity::getTranscriptPath)
+                .map(Path::of);
+    }
+
     /** Незавершённые загрузки владельца — для ответа на «Статус». */
     @Transactional(readOnly = true)
     public List<DownloadJob> activeDownloads(Owner owner) {

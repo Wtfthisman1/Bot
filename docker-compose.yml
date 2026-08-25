@@ -50,8 +50,6 @@ services:
       - UPLOAD_BASE_URL=${UPLOAD_BASE_URL}
       # Без этого ссылка на скачивание указывала бы на localhost внутри контейнера
       - DOWNLOAD_BASE_URL=${DOWNLOAD_BASE_URL}
-      # Реестр download-токенов на смонтированном томе — ссылки переживают перезапуск
-      - DOWNLOAD_TOKEN_STORE=/app/upload/download-tokens.tsv
       
       # Предзагрузка моделей Whisper
       - WHISPER_PRELOAD_MODELS=medium

@@ -13,14 +13,19 @@ package Bot.notify;
 import Bot.owner.Owner;
 
 import java.nio.file.Path;
+import java.util.UUID;
 
 public interface JobNotifier {
 
     /** Умеет ли эта реализация обслуживать такого владельца. */
     boolean supports(Owner owner);
 
-    /** Расшифровка готова — отдать её владельцу. */
-    void transcriptReady(Owner owner, Path txt);
+    /**
+     * Расшифровка готова — отдать её владельцу.
+     *
+     * @param jobId задача, по которой потом находят соседние форматы
+     */
+    void transcriptReady(UUID jobId, Owner owner, Path txt);
 
     /** Задача сорвалась: {@code message} уже написан на языке пользователя. */
     void failed(Owner owner, String message);

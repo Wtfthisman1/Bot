@@ -8,7 +8,7 @@ package Bot.handler;
  * {@link UserSessionService} + {@link UrlActionService}: здесь нет ни текстовых
  * «транскрибировать/скачать», ни разбора callback — только маршрутизация.</p>
  *
- * <p>Связан с {@link TelegramFileDownloader}, {@link TranscribeExecutor},
+ * <p>Связан с {@link TelegramFileDownloader}, {@link JobStore},
  * {@link MessageSender}, {@link UploadService}. Основные методы:
  * {@code handleText}, {@code handleVoice}, {@code handleAudio},
  * {@code handleVideo}, {@code handleDocument}.</p>
@@ -18,8 +18,9 @@ import Bot.telegram.FileTooLargeException;
 import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
 import Bot.telegram.TelegramFileDownloader;
-import Bot.transcription.TranscribeExecutor;
-import Bot.transcription.TranscriptDeliveryService;
+import Bot.owner.Owner;
+import Bot.processing.JobStore;
+import Bot.processing.ProcessingJob;
 import Bot.upload.UploadService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,8 +50,7 @@ public class MessageHandler {
             List.of(".mp4", ".avi", ".mkv", ".mov", ".webm");
 
     private final TaskExecutor taskExecutor;
-    private final TranscribeExecutor transcriber;
-    private final TranscriptDeliveryService transcriptDelivery;
+    private final JobStore jobStore;
     private final TelegramFileDownloader fileDownloader;
     private final MessageSender messageSender;
     private final UploadService uploadService;
@@ -143,10 +143,14 @@ public class MessageHandler {
 
     /**
      * Общий путь для всех медиа: проверка лимита → подтверждение → фоновое
-     * скачивание из Telegram → транскрипция → отправка результата.
+     * скачивание из Telegram → постановка в очередь.
      *
-     * <p>Раньше эти пять шагов были скопированы в каждом {@code handleXxx};
+     * <p>Раньше эти шаги были скопированы в каждом {@code handleXxx};
      * различались только тексты и способ скачивания — они и остались параметрами.</p>
+     *
+     * <p>Расшифровка идёт через общую очередь, а не прямо здесь: своим путём
+     * она не переживала перезапуск и не попадала в «Статус» — пользователь
+     * видел «активных задач нет», пока файл считался.</p>
      */
     private void transcribeMedia(long chatId, Long fileSize, String ack, MediaDownload download) {
         if (tooLargeForBot(chatId, fileSize)) {
@@ -160,8 +164,7 @@ public class MessageHandler {
         taskExecutor.execute(() -> {
             try {
                 Path media = download.get();
-                Path transcript = transcriber.run(chatId, media);
-                transcriptDelivery.deliver(chatId, transcript);
+                jobStore.enqueue(ProcessingJob.newFile(Owner.telegram(chatId), media));
             } catch (FileTooLargeException e) {
                 log.info("Файл превысил лимит Bot API: chatId={}", chatId);
                 sendUploadFormOffer(chatId, fileSize);

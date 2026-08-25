@@ -145,6 +145,26 @@ class JobStoreTest {
         assertThat(load.total()).isEqualTo(2);
     }
 
+    /** Кнопки под расшифровкой находят файл по задаче — отдельный реестр не нужен. */
+    @Test
+    void transcriptIsFoundByItsJob() {
+        store.enqueue(ProcessingJob.newFile(OWNER, Path.of("/tmp/видео.mp4")));
+        ProcessingJob claimed = store.claim().orElseThrow();
+        store.complete(claimed.id(), Path.of("/tmp/расшифровка.txt"));
+
+        assertThat(store.transcriptOf(claimed.id(), OWNER)).contains(Path.of("/tmp/расшифровка.txt"));
+    }
+
+    /** Чужой идентификатор не должен открывать доступ к расшифровке. */
+    @Test
+    void transcriptOfSomeoneElseIsNotGivenAway() {
+        store.enqueue(ProcessingJob.newFile(OWNER, Path.of("/tmp/видео.mp4")));
+        ProcessingJob claimed = store.claim().orElseThrow();
+        store.complete(claimed.id(), Path.of("/tmp/расшифровка.txt"));
+
+        assertThat(store.transcriptOf(claimed.id(), Owner.telegram(777L))).isEmpty();
+    }
+
     /**
      * Сведения о загрузке раньше лежали в карте внутри сервиса и умирали вместе
      * с процессом: после перезапуска скачанный файл молча пропадал, потому что

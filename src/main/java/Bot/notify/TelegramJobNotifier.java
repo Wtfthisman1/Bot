@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
@@ -29,8 +30,8 @@ public class TelegramJobNotifier implements JobNotifier {
     }
 
     @Override
-    public void transcriptReady(Owner owner, Path txt) {
-        transcriptDelivery.deliver(owner.telegramChatId(), txt);
+    public void transcriptReady(UUID jobId, Owner owner, Path txt) {
+        transcriptDelivery.deliver(jobId, owner.telegramChatId(), txt);
     }
 
     @Override

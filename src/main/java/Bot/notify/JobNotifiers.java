@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -24,8 +25,8 @@ public class JobNotifiers {
 
     private final List<JobNotifier> notifiers;
 
-    public void transcriptReady(Owner owner, Path txt) {
-        find(owner).ifPresent(n -> n.transcriptReady(owner, txt));
+    public void transcriptReady(UUID jobId, Owner owner, Path txt) {
+        find(owner).ifPresent(n -> n.transcriptReady(jobId, owner, txt));
     }
 
     public void failed(Owner owner, String message) {

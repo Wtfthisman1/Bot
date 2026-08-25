@@ -1,5 +1,7 @@
 package Bot.transcription;
 
+import Bot.owner.Owner;
+import Bot.processing.JobStore;
 import Bot.telegram.MessageSender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -8,7 +10,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
@@ -22,6 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -37,26 +39,29 @@ class TranscriptDeliveryServiceTest {
     @TempDir Path tmp;
 
     @Mock private MessageSender messageSender;
+    @Mock private JobStore jobStore;
 
-    private TranscriptRegistry registry;
     private TranscriptDeliveryService delivery;
     private Path txt;
 
+    /** Задача, под которой пришла расшифровка: её id стоит в кнопках. */
+    private static final java.util.UUID JOB = java.util.UUID.randomUUID();
+
     @BeforeEach
     void setUp() throws IOException {
-        registry = new TranscriptRegistry();
-        ReflectionTestUtils.setField(registry, "storePath", tmp.resolve("store.tsv").toString());
-        ReflectionTestUtils.invokeMethod(registry, "load");
-
-        delivery = new TranscriptDeliveryService(registry, new WordExporter(), messageSender);
+        delivery = new TranscriptDeliveryService(jobStore, new WordExporter(), messageSender);
         txt = Files.writeString(tmp.resolve("лекция.txt"), "текст расшифровки");
+
+        // Кнопки находят расшифровку по задаче — мок отвечает так же, как база
+        lenient().when(jobStore.transcriptOf(JOB, Owner.telegram(CHAT)))
+                .thenReturn(java.util.Optional.of(txt));
     }
 
     @Test
     void offersSubtitlesOnlyWhenWhisperProducedThem() throws IOException {
         Files.writeString(tmp.resolve("лекция.srt"), "1\n00:00:00,000 --> 00:00:01,000\nтекст\n");
 
-        delivery.deliver(CHAT, txt);
+        delivery.deliver(JOB, CHAT, txt);
 
         // .srt есть, .vtt нет; Word собирается из текста всегда
         assertThat(buttonLabels()).containsExactly(
@@ -66,7 +71,7 @@ class TranscriptDeliveryServiceTest {
     @Test
     void buttonSendsRequestedSubtitleFile() throws IOException {
         Path srt = Files.writeString(tmp.resolve("лекция.srt"), "субтитры");
-        delivery.deliver(CHAT, txt);
+        delivery.deliver(JOB, CHAT, txt);
 
         delivery.sendFormat(CHAT, idFromKeyboard(), TranscriptFormat.SRT);
 
@@ -76,7 +81,7 @@ class TranscriptDeliveryServiceTest {
     /** Word собирается на лету — отдельного файла на диске до нажатия нет. */
     @Test
     void wordIsBuiltOnDemand() {
-        delivery.deliver(CHAT, txt);
+        delivery.deliver(JOB, CHAT, txt);
 
         delivery.sendFormat(CHAT, idFromKeyboard(), TranscriptFormat.DOCX);
 
@@ -97,7 +102,7 @@ class TranscriptDeliveryServiceTest {
     /** Формат, которого нет, не отдаётся: пользователь получает объяснение. */
     @Test
     void missingFormatIsReportedNotSent() {
-        delivery.deliver(CHAT, txt);
+        delivery.deliver(JOB, CHAT, txt);
 
         delivery.sendFormat(CHAT, idFromKeyboard(), TranscriptFormat.VTT);
 

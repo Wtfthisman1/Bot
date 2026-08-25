@@ -165,7 +165,7 @@ public class JobWorker {
             Path txt = transcriber.run(job.owner().telegramChatId(), job.filePath());
             log.info("Транскрипция готова {}", txt);
             jobs.complete(job.id(), txt);
-            notifiers.transcriptReady(job.owner(), txt);
+            notifiers.transcriptReady(job.id(), job.owner(), txt);
         } catch (Exception e) {
             log.error("Ошибка транскрипции для файла: {}", job.filePath(), e);
             String message = "❌ Не удалось расшифровать файл. "

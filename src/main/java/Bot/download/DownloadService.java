@@ -178,7 +178,7 @@ public class DownloadService {
      * не доходило совсем.</p>
      */
     private void sendDownloadLink(Path filePath, DownloadInfo info, long size) {
-        String token = downloadTokenRegistry.register(filePath, info.chatId());
+        String token = downloadTokenRegistry.register(filePath, Owner.telegram(info.chatId()));
         String link = downloadBaseUrl + "/download/" + token;
         log.info("Выдана ссылка на скачивание: chatId={}, файл={}",
                 info.chatId(), filePath.getFileName());

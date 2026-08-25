@@ -21,7 +21,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -63,10 +67,8 @@ class DownloadLinkFlowTest {
     void setUp() throws IOException {
         videoFile = Files.writeString(tmp.resolve("Ролик & друзья.mp4"), "video-bytes");
 
-        registry = new DownloadTokenRegistry();
+        registry = new DownloadTokenRegistry(inMemoryTokens());
         ReflectionTestUtils.setField(registry, "ttlHours", 24);
-        ReflectionTestUtils.setField(registry, "storePath", tmp.resolve("tokens.tsv").toString());
-        ReflectionTestUtils.invokeMethod(registry, "load");
 
         rememberEnqueuedJobs();
 
@@ -160,6 +162,24 @@ class DownloadLinkFlowTest {
                 .filter(job -> job.downloadId() != null && job.owner().equals(call.getArgument(0)))
                 .map(DownloadLinkFlowTest::asDownloadJob)
                 .toList());
+    }
+
+    /**
+     * Таблица токенов картой в памяти: этот тест про то, что ссылка из
+     * сообщения реально отдаёт файл, а не про хранение — поднимать ради него
+     * Postgres незачем. Само хранение проверяет DownloadTokenRegistryTest.
+     */
+    private DownloadTokenRepository inMemoryTokens() {
+        Map<String, DownloadTokenEntity> rows = new HashMap<>();
+        DownloadTokenRepository repository = mock(DownloadTokenRepository.class);
+        lenient().when(repository.save(any(DownloadTokenEntity.class))).thenAnswer(call -> {
+            DownloadTokenEntity entity = call.getArgument(0);
+            rows.put(entity.getToken(), entity);
+            return entity;
+        });
+        lenient().when(repository.findById(any()))
+                .thenAnswer(call -> Optional.ofNullable(rows.get(call.getArgument(0))));
+        return repository;
     }
 
     private static JobStore.DownloadJob asDownloadJob(ProcessingJob job) {
