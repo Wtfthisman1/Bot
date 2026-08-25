@@ -8,6 +8,7 @@ package Bot.home;
  * забытая аннотация {@code @Profile} на домашнем бине снова притянет за собой
  * репозитории и уронит старт уже на сервере.</p>
  */
+import Bot.home.spool.SpoolingHomeApi;
 import Bot.processing.JobStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
@@ -36,8 +37,8 @@ class BotOnlyContextTest {
     @Autowired private ApplicationContext context;
 
     @Test
-    void talksToHomeOverHttp() {
-        assertThat(context.getBean(HomeApi.class)).isInstanceOf(HttpHomeApi.class);
+    void talksToHomeOverHttpAndSpoolsWhenItSleeps() {
+        assertThat(context.getBean(HomeApi.class)).isInstanceOf(SpoolingHomeApi.class);
     }
 
     @Test

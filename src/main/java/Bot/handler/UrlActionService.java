@@ -17,6 +17,7 @@ package Bot.handler;
 import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
 import Bot.home.HomeApi;
+import Bot.home.HomeApi.Acceptance;
 import Bot.owner.Owner;
 import Bot.processing.MediaKind;
 import Bot.service.SupportedPlatforms;
@@ -74,16 +75,19 @@ public class UrlActionService {
         }
 
         Owner owner = Owner.telegram(chatId);
+        Acceptance acceptance = Acceptance.STARTED;
         for (String url : accepted) {
-            switch (mode) {
+            acceptance = acceptance.and(switch (mode) {
                 case TRANSCRIBE -> home.transcribeLink(owner, url);
                 case DOWNLOAD -> home.downloadLink(owner, url, media);
-            }
+            });
         }
 
-        log.info("Запущено действие {} ({}): chatId={}, кто={}, ссылок={}",
-                mode, media, chatId, userName, accepted.size());
-        messageSender.sendMessage(chatId, "✅ Всё запущено, ожидайте.");
+        log.info("Запущено действие {} ({}): chatId={}, кто={}, ссылок={}, принято={}",
+                mode, media, chatId, userName, accepted.size(), acceptance);
+        // Текст зависит от того, взялся ли дом за работу прямо сейчас:
+        // обещать «запущено» спящей машине — обманывать на несколько часов
+        messageSender.sendMessage(chatId, acceptance.userMessage());
         return true;
     }
 }

@@ -15,6 +15,7 @@ package Bot.handler;
  */
 import Bot.handler.UserSessionService.Pending;
 import Bot.home.HomeApi;
+import Bot.home.HomeApi.Acceptance;
 import Bot.home.HomeApi.TelegramFile;
 import Bot.home.HomeUnavailableException;
 import Bot.telegram.FileTooLargeException;
@@ -164,7 +165,11 @@ public class MessageHandler {
 
         taskExecutor.execute(() -> {
             try {
-                home.transcribeTelegramFile(Owner.telegram(chatId), file);
+                Acceptance acceptance = home.transcribeTelegramFile(Owner.telegram(chatId), file);
+                if (acceptance.isDeferred()) {
+                    // Подтверждение уже ушло — поправляем его, а не молчим
+                    messageSender.sendMessage(chatId, acceptance.userMessage());
+                }
             } catch (FileTooLargeException e) {
                 log.info("Файл превысил лимит Bot API: chatId={}", chatId);
                 sendUploadFormOffer(chatId, fileSize);

@@ -12,6 +12,8 @@ package Bot.owner;
  * <p>Идентификатор — строка, а не число: у Telegram это chatId, у аккаунта
  * будет UUID. Общего числового пространства у них нет.</p>
  */
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.util.Objects;
 
 public record Owner(OwnerType type, String id) {
@@ -31,6 +33,13 @@ public record Owner(OwnerType type, String id) {
         return new Owner(OwnerType.ACCOUNT, accountId);
     }
 
+    /**
+     * {@code @JsonIgnore} здесь не украшение: владелец ездит по сети — в теле
+     * запроса к дому и в записи спула на диске. Jackson принимает {@code isXxx}
+     * за свойство и пишет рядом с {@code type} производное {@code telegram},
+     * которое потом некуда прочитать: у записи такого поля нет.
+     */
+    @JsonIgnore
     public boolean isTelegram() {
         return type == OwnerType.TELEGRAM;
     }

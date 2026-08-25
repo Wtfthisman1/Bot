@@ -45,17 +45,19 @@ public class LocalHomeApi implements HomeApi {
     private final TranscriptDeliveryService transcriptDelivery;
 
     @Override
-    public void transcribeLink(Owner owner, String url) {
+    public Acceptance transcribeLink(Owner owner, String url) {
         jobStore.enqueue(ProcessingJob.newLink(owner, url));
+        return Acceptance.STARTED;
     }
 
     @Override
-    public void downloadLink(Owner owner, String url, MediaKind media) {
+    public Acceptance downloadLink(Owner owner, String url, MediaKind media) {
         downloadService.createDownloadTask(owner, url, media);
+        return Acceptance.STARTED;
     }
 
     @Override
-    public void transcribeTelegramFile(Owner owner, TelegramFile file) throws Exception {
+    public Acceptance transcribeTelegramFile(Owner owner, TelegramFile file) throws Exception {
         long chatId = owner.telegramChatId();
         Path saved = switch (file.kind()) {
             case VOICE -> fileDownloader.downloadVoice(file.fileId(), chatId);
@@ -64,6 +66,7 @@ public class LocalHomeApi implements HomeApi {
             case DOCUMENT -> fileDownloader.downloadDocument(file.fileId(), chatId, file.fileName());
         };
         jobStore.enqueue(ProcessingJob.newFile(owner, saved));
+        return Acceptance.STARTED;
     }
 
     @Override

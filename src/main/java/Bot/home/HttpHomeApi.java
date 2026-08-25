@@ -4,9 +4,9 @@ package Bot.home;
  * Реализация {@link HomeApi} для процесса, в котором домашней половины нет.
  *
  * <p>Ответственность: те же вызовы, но по HTTP через WireGuard — так работает
- * бот на VPS, где нет ни базы, ни файлов, ни видеокарты. Поднимается в любом
- * процессе без профиля {@code home}: ровно тогда локальной реализации не
- * существует, и звать больше некого.</p>
+ * бот на VPS, где нет ни базы, ни файлов, ни видеокарты. Собирается в
+ * {@link HomeApiConfig} — обычно внутри {@code SpoolingHomeApi}, который
+ * подхватывает задачи, если дом не ответил.</p>
  *
  * <p>Адрес и ключ обязательны: без них бот способен только здороваться, и
  * молчаливый старт обернулся бы «бот отвечает, но ничего не делает» — гораздо
@@ -15,7 +15,6 @@ package Bot.home;
  * <p>Разрыв связи отделён от ошибки дома: {@link HomeUnavailableException}
  * означает «домашняя машина спит», и пользователю про это говорят прямо.</p>
  */
-import Bot.config.Profiles;
 import Bot.home.HomeProtocol.DownloadRequest;
 import Bot.home.HomeProtocol.LinkRequest;
 import Bot.home.HomeProtocol.LinkResponse;
@@ -27,11 +26,8 @@ import Bot.processing.MediaKind;
 import Bot.telegram.FileTooLargeException;
 import Bot.transcription.TranscriptFormat;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -39,8 +35,6 @@ import org.springframework.web.client.RestClientResponseException;
 import java.time.Duration;
 import java.util.function.Supplier;
 
-@Profile("!" + Profiles.HOME)
-@Service
 @Slf4j
 public class HttpHomeApi implements HomeApi {
 
@@ -58,8 +52,7 @@ public class HttpHomeApi implements HomeApi {
 
     private final RestClient client;
 
-    public HttpHomeApi(@Value("${home.api.base-url:}") String baseUrl,
-                       @Value("${home.api.key:}") String key) {
+    public HttpHomeApi(String baseUrl, String key) {
         if (baseUrl.isBlank() || key.isBlank()) {
             throw new IllegalStateException(
                     "Без профиля 'home' боту нужен адрес домашней машины: задайте HOME_API_URL "
@@ -79,19 +72,23 @@ public class HttpHomeApi implements HomeApi {
     }
 
     @Override
-    public void transcribeLink(Owner owner, String url) {
+    public Acceptance transcribeLink(Owner owner, String url) {
         post(HomeProtocol.LINK, new LinkRequest(owner, url));
+        return Acceptance.STARTED;
     }
 
     @Override
-    public void downloadLink(Owner owner, String url, MediaKind media) {
+    public Acceptance downloadLink(Owner owner, String url, MediaKind media) {
         post(HomeProtocol.DOWNLOAD, new DownloadRequest(owner, url, media));
+        return Acceptance.STARTED;
     }
 
+    /** Дом либо принял файл, либо не ответил вовсе — отложенного «да» здесь нет. */
     @Override
-    public void transcribeTelegramFile(Owner owner, TelegramFile file) throws Exception {
+    public Acceptance transcribeTelegramFile(Owner owner, TelegramFile file) throws Exception {
         try {
             post(HomeProtocol.TELEGRAM_FILE, new TelegramFileRequest(owner, file));
+            return Acceptance.STARTED;
         } catch (RestClientResponseException e) {
             if (e.getStatusCode() == HttpStatus.PAYLOAD_TOO_LARGE) {
                 // Дом уже сходил в Bot API и получил отказ по размеру —
