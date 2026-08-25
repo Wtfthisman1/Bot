@@ -1,0 +1,43 @@
+# Приём запросов на VPS: Telegram и (дальше) сайт.
+#
+# Ставится скриптом deploy/vps/setup-bot.sh. Здесь нет ни базы, ни файлов, ни
+# видеокарты — всё это остаётся дома, за туннелем. Смысл переезда один: бот
+# отвечает и тогда, когда домашняя машина спит, — пусть и отвечает «сейчас
+# недоступно».
+
+[Unit]
+Description=Transcribot — приём запросов (Telegram, сайт)
+# Без туннеля бот стартует, но до дома не достучится: задачи ставить некуда.
+# Ждём именно поднятую сеть и wg0.
+After=network-online.target wg-quick@wg0.service
+Wants=network-online.target
+# Три падения подряд за минуту — сломанная конфигурация, а не невезение.
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=transcribot
+Group=transcribot
+WorkingDirectory=/opt/transcribot
+
+# Токен и ключ дома лежат отдельно от кода и читаются только root и службой
+EnvironmentFile=/etc/transcribot/bot.env
+
+# На VPS 960 МБ на всё вместе с nginx. Куча в 320 МБ приложению без базы и
+# без обработки файлов — с запасом, а без явного предела JVM возьмёт четверть
+# памяти машины и упрётся в OOM killer в первый же час.
+ExecStart=/usr/bin/java -Xmx320m -XX:MaxMetaspaceSize=192m -jar /opt/transcribot/bot.jar
+
+Restart=always
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=transcribot-bot
+
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -38,6 +38,12 @@ ExecStart=/usr/bin/java -jar /home/dmitry/IdeaProjects/Bot/build/libs/bot.jar
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=HOME=/home/dmitry
 
+# По умолчанию поднимаются обе половины — и приём запросов, и исполнение.
+# После переезда бота на VPS раскомментируйте строку: getUpdates Telegram
+# отдаёт одному процессу, и два long polling начнут отбирать апдейты друг у
+# друга (в логах — 409 Conflict). Дома остаются очередь, файлы и Whisper.
+#Environment=SPRING_PROFILES_ACTIVE=home
+
 Restart=always
 RestartSec=10
 
@@ -47,10 +53,9 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=transcribot
 
-# Мягкая остановка. Очередь пока живёт в памяти, поэтому незавершённые задачи
-# при перезапуске теряются — пользователю придётся прислать запись заново.
-# Это чинится в фазе 1 (очередь в Postgres), а ждать часами при выключении
-# машины всё равно нельзя.
+# Мягкая остановка. Очередь живёт в Postgres, и задача, прерванная на середине,
+# вернётся в очередь при следующем старте (JobStore.recoverStuck) — ждать
+# часами при выключении машины всё равно нельзя.
 KillSignal=SIGTERM
 TimeoutStopSec=30
 
