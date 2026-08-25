@@ -155,12 +155,21 @@ echo 'curl -s -o /dev/null -w "%{http_code}\n" \
 403 здесь — правильный ответ: фильтр на месте. Если приходит 000 или таймаут,
 дело в туннеле или в том, что дом не слушает 8080, — переключаться рано.
 
-**4. Дом перестаёт принимать апдейты.** Раскомментируйте в
-`deploy/home/transcribot.service` строку `Environment=SPRING_PROFILES_ACTIVE=home`
-и примените:
+**4. Дом перестаёт принимать апдейты.** Профиль задаётся drop-in-файлом: правка
+самого юнита разошлась бы с репозиторием, а так откат — это `rm` одного файла.
 
 ```bash
-sudo bash deploy/home/setup-service.sh
+sudo mkdir -p /etc/systemd/system/transcribot.service.d
+printf '[Service]\nEnvironment=SPRING_PROFILES_ACTIVE=home\n' \
+  | sudo tee /etc/systemd/system/transcribot.service.d/profile.conf
+sudo systemctl daemon-reload && sudo systemctl restart transcribot
+```
+
+Вернуть всё домой, если понадобится:
+
+```bash
+sudo rm /etc/systemd/system/transcribot.service.d/profile.conf
+sudo systemctl daemon-reload && sudo systemctl restart transcribot
 ```
 
 Это обязательный шаг: `getUpdates` Telegram отдаёт одному процессу, два long

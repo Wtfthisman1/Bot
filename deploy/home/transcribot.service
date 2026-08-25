@@ -39,10 +39,11 @@ Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=HOME=/home/dmitry
 
 # По умолчанию поднимаются обе половины — и приём запросов, и исполнение.
-# После переезда бота на VPS раскомментируйте строку: getUpdates Telegram
-# отдаёт одному процессу, и два long polling начнут отбирать апдейты друг у
-# друга (в логах — 409 Conflict). Дома остаются очередь, файлы и Whisper.
-#Environment=SPRING_PROFILES_ACTIVE=home
+# После переезда бота на VPS дом должен перестать читать апдейты: getUpdates
+# Telegram отдаёт одному процессу, и два long polling начнут отбирать их друг
+# у друга (в логах — 409 Conflict). Делается это drop-in-файлом, а не правкой
+# юнита: состояние конкретной машины не должно расходиться с репозиторием, а
+# откат — это удаление одного файла. Команда — в deploy/README.md, шаг 4.
 
 Restart=always
 RestartSec=10
