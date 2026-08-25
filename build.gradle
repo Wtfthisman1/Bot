@@ -28,12 +28,30 @@ repositories {
 	mavenCentral() 
 }
 
+// Версия новее, чем в BOM Spring Boot: та тянет testcontainers 1.19, который
+// говорит с Docker по API 1.32, а Docker 29 младше 1.40 не принимает — тесты
+// просто не находили демон. Задаётся именно так: BOM Spring Boot сильнее
+// обычного platform() и вернул бы свою версию.
+ext['testcontainers.version'] = '1.21.4'
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 	implementation 'org.telegram:telegrambots:6.9.7.1'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	// Очередь задач и расшифровки живут в Postgres: в памяти они гибли при
+	// каждом перезапуске, а пользователю приходилось присылать запись заново
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.flywaydb:flyway-core'
+	implementation 'org.flywaydb:flyway-database-postgresql'
+	runtimeOnly    'org.postgresql:postgresql'
+	// telegrambots тянет за собой jackson-module-jaxb-annotations (через
+	// Jersey), а тот написан под javax.xml.bind, которого в Spring Boot 3 нет.
+	// Пока модуль никто не трогал, это не мешало; Hibernate при старте просит
+	// Jackson подгрузить все найденные модули — и контекст падает.
+	// Выкидывать модуль рискованно: на нём же держится HTTP-стек telegrambots.
+	runtimeOnly    'javax.xml.bind:jaxb-api:2.3.1'
 	implementation 'me.paulschwarz:spring-dotenv:4.0.0'
 	// Экспорт транскрипта в .docx. Тянет xmlbeans и заметно утяжеляет jar, но
 	// формат Word руками не собрать: дальше сюда лягут спикеры и таймкоды.
@@ -45,6 +63,12 @@ dependencies {
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	// Тесты ходят в настоящий Postgres в контейнере: очередь опирается на
+	// FOR UPDATE SKIP LOCKED, которого нет у встраиваемых баз — H2 показал бы
+	// зелёные тесты и сломался на проде
+	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:postgresql'
 	testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
 }
 

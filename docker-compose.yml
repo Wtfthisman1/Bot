@@ -1,4 +1,38 @@
 services:
+  # База данных. Держит очередь задач, расшифровки и (дальше) аккаунты.
+  #
+  # Порт наружу — 5433, а не 5432: на этой машине живёт ещё один проект со
+  # своим Postgres на стандартном порту, и занимать его значило бы ломать
+  # соседа при каждом запуске. Внутри контейнера порт обычный.
+  #
+  # Слушает только 127.0.0.1: база не должна быть доступна из сети, даже
+  # из домашней — наружу смотрит один nginx на VPS.
+  postgres:
+    image: postgres:16-alpine
+    container_name: bot-postgres
+    ports:
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
+    environment:
+      - POSTGRES_DB=${DB_NAME:-bot_db}
+      - POSTGRES_USER=${DB_USER:-bot_user}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?нужен DB_PASSWORD в .env}
+      # Явная локаль: сортировка и регистр в русских текстах зависят от неё,
+      # а поиск по расшифровкам придёт в фазе 4
+      - POSTGRES_INITDB_ARGS=--locale=C.UTF-8 --encoding=UTF8
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      # Без -h база успевает ответить по сокету раньше, чем начнёт слушать TCP,
+      # и приложение получает «connection refused» на здоровом контейнере
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${DB_USER:-bot_user} -d ${DB_NAME:-bot_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - bot-network
+
   bot:
     build: 
       context: .
@@ -39,6 +73,9 @@ services:
       - ./logs:/app/logs
       # Кеш моделей Whisper (сохраняется между пересборками!)
       - whisper_cache:/app/.cache
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8081/actuator/health"]
@@ -52,6 +89,9 @@ services:
 volumes:
   # Именованный том для кеша моделей
   whisper_cache:
+    driver: local
+  # Данные Postgres переживают пересоздание контейнера
+  postgres_data:
     driver: local
 
 networks:

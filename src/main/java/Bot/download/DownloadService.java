@@ -5,7 +5,7 @@ package Bot.download;
  *
  * <p>Ответственность: создаёт задачи загрузки, выдаёт рабочую ссылку на готовый
  * файл, уведомляет пользователя об успехе или ошибке. Связан с
- * {@link Bot.processing.JobQueue}, {@link DownloadTokenRegistry},
+ * {@link Bot.processing.JobStore}, {@link DownloadTokenRegistry},
  * {@link MessageSender}, {@link SupportedPlatforms}. Основные методы:
  * {@code createDownloadTask}, {@code handleDownloadComplete},
  * {@code handleDownloadError}, {@code getActiveDownloads}.</p>
@@ -16,7 +16,8 @@ package Bot.download;
  * в любом случае, а вложение — дополнительно, когда влезает в лимит Bot API.</p>
  */
 import Bot.service.SupportedPlatforms;
-import Bot.processing.JobQueue;
+import Bot.owner.Owner;
+import Bot.processing.JobStore;
 import Bot.processing.MediaKind;
 import Bot.processing.ProcessingJob;
 import Bot.telegram.Keyboards;
@@ -54,7 +55,7 @@ public class DownloadService {
     @Value("${download.token.ttl-hours:24}")
     private int linkTtlHours;
 
-    private final JobQueue jobQueue;
+    private final JobStore jobStore;
     private final MessageSender messageSender;
     private final DownloadTokenRegistry downloadTokenRegistry;
     private final SupportedPlatforms supportedPlatforms;
@@ -99,8 +100,8 @@ public class DownloadService {
         String downloadId = UUID.randomUUID().toString();
         downloads.put(downloadId, new DownloadInfo(chatId, url, name, System.currentTimeMillis()));
 
-        ProcessingJob job = ProcessingJob.newDownload(chatId, url, downloadId, media);
-        jobQueue.enqueue(job);
+        ProcessingJob job = ProcessingJob.newDownload(Owner.telegram(chatId), url, downloadId, media);
+        jobStore.enqueue(job);
 
         log.info("Задача загрузки создана: chatId={}, jobId={}, downloadId={}, media={}, активных={}",
                 chatId, job.id(), downloadId, media, downloads.size());

@@ -1,6 +1,7 @@
 package Bot.upload;
 
-import Bot.processing.JobQueue;
+import Bot.owner.Owner;
+import Bot.processing.JobStore;
 import Bot.processing.ProcessingJob;
 import Bot.service.StorageManager;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +26,7 @@ import java.nio.file.Path;
  *
  * <p>Ответственность: отдаёт HTML-форму и принимает multipart-запросы до 5
  * файлов и 5 ссылок. Валидирует одноразовый токен, сохраняет файлы и ставит
- * задачи в {@link JobQueue}. URL формы: <b>/upload/{token}</b>.</p>
+ * задачи в {@link JobStore}. URL формы: <b>/upload/{token}</b>.</p>
  */
 @RestController
 @RequestMapping("/upload")
@@ -36,7 +37,7 @@ public class UploadController {
     private static final int MAX_SLOTS = 5;
 
     private final UploadService  uploadService;
-    private final JobQueue       jobQueue;
+    private final JobStore       jobStore;
     private final StorageManager storageManager;
 
 
@@ -90,7 +91,7 @@ public class UploadController {
                 log.info("Принят файл через форму: chatId={}, имя='{}', размер={} байт",
                         chatId, f.getOriginalFilename(), f.getSize());
                 f.transferTo(dst);                                     // сохраняем
-                jobQueue.enqueue(ProcessingJob.newFile(chatId, dst));  // сразу в очередь
+                jobStore.enqueue(ProcessingJob.newFile(Owner.telegram(chatId), dst));  // сразу в очередь
             }
         }
 
@@ -98,7 +99,7 @@ public class UploadController {
         if (urls != null) {
             for (String u : urls) {
                 if (u == null || u.isBlank()) continue;
-                jobQueue.enqueue(ProcessingJob.newLink(chatId, u.trim()));
+                jobStore.enqueue(ProcessingJob.newLink(Owner.telegram(chatId), u.trim()));
             }
         }
 

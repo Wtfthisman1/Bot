@@ -1,14 +1,27 @@
 package Bot.processing;
 
-
+/**
+ * Пул рабочих потоков обработки задач.
+ *
+ * <p>Ответственность: забирать задачи из {@link JobStore}, выполнять этап
+ * скачивания или транскрипции, отмечать результат и отдавать его владельцу
+ * через {@link JobNotifiers}. Связан с {@link DownloaderExecutor},
+ * {@link TranscribeExecutor}, {@link DownloadService}. Ключевые методы:
+ * {@code workLoop}, {@code download}, {@code transcribe}.</p>
+ *
+ * <p>Задачи берутся опросом базы, а не из очереди в памяти: очередь пережила
+ * бы перезапуск только на диске. Пустая очередь — обычное состояние, поэтому
+ * между опросами воркер спит {@code worker.poll-interval-ms}; задержка в
+ * секунду на фоне минут транскрипции незаметна.</p>
+ *
+ * <p>Размер пула — {@code worker.pool-size} (по умолчанию 2). Одну и ту же
+ * задачу двое взять не могут: строка блокируется в базе.</p>
+ */
+import Bot.download.DownloadService;
 import Bot.download.DownloaderExecutor;
-import Bot.telegram.Keyboards;
-import Bot.telegram.MessageSender;
+import Bot.notify.JobNotifiers;
 import Bot.telegram.TelegramBot;
 import Bot.transcription.TranscribeExecutor;
-import Bot.transcription.TranscriptDeliveryService;
-import Bot.download.DownloadService;
-import Bot.service.StatusService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +31,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -27,39 +41,28 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class JobWorker {
 
-    /**
-     * Пул рабочих потоков обработки задач очереди.
-     *
-     * <p>Ответственность: несколько потоков параллельно извлекают задачи,
-     * выполняют этапы скачивания и транскрипции, отправляют результаты и метят
-     * статусы. Связан с {@link JobQueue}, {@link DownloaderExecutor},
-     * {@link TranscribeExecutor}, {@link TranscriptDeliveryService},
-     * {@link MessageSender}, {@link DownloadService},
-     * {@link StatusService}. Ключевые методы: {@code workLoop}, {@code download},
-     * {@code transcribe}.</p>
-     *
-     * <p>Размер пула задаётся свойством {@code worker.pool-size} (по умолчанию 2).
-     * {@link JobQueue} использует {@code LinkedBlockingQueue}, чьи {@code take}/
-     * {@code offer} потокобезопасны, поэтому несколько потребителей корректно
-     * разбирают одну очередь.</p>
-     */
-
     @Value("${worker.pool-size:2}")
     private int poolSize;
 
-    private final JobQueue queue;
+    /** Пауза между опросами пустой очереди. */
+    @Value("${worker.poll-interval-ms:1000}")
+    private long pollIntervalMs;
+
+    private final JobStore jobs;
     private final DownloaderExecutor downloader;
     private final TranscribeExecutor transcriber;
-    private final TranscriptDeliveryService transcriptDelivery;
-    private final MessageSender messageSender;
+    private final JobNotifiers notifiers;
     private final DownloadService downloadService;
-    private final StatusService statusService;
 
     private volatile boolean running = true;
     private ExecutorService pool;
 
     @PostConstruct
     void start() {
+        // Всё, что осталось «в работе», — наследство прошлого запуска:
+        // тот воркер уже не вернётся
+        jobs.recoverStuck();
+
         int size = Math.max(1, poolSize);
         AtomicInteger seq = new AtomicInteger(1);
         pool = Executors.newFixedThreadPool(size, r -> {
@@ -70,15 +73,14 @@ public class JobWorker {
         for (int i = 0; i < size; i++) {
             pool.submit(this::workLoop);
         }
-        log.info("Пул воркеров запущен: потоков={}", size);
+        log.info("Пул воркеров запущен: потоков={}, опрос каждые {} мс", size, pollIntervalMs);
     }
 
     @PreDestroy
     void stop() {
         running = false;
         if (pool != null) {
-            // прерываем потоки, заблокированные на queue.take()
-            pool.shutdownNow();
+            pool.shutdownNow();   // прерываем потоки, спящие между опросами
         }
         log.info("Пул воркеров остановлен");
     }
@@ -86,30 +88,12 @@ public class JobWorker {
     private void workLoop() {
         while (running) {
             try {
-                ProcessingJob job = queue.take();   // блокируемся
-
-                // Отмечаем задачу как активную
-                statusService.markJobActive(job);
-
-                // jobId/chatId попадают в каждую строку лога этого этапа —
-                // так задачу видно насквозь от очереди до результата
-                MDC.put("jobId", String.valueOf(job.id()));
-                MDC.put(TelegramBot.MDC_CHAT_ID, String.valueOf(job.chatId()));
-                long startedAt = System.currentTimeMillis();
-                try {
-                    log.info("Начат этап {}: jobId={}", job.state(), job.id());
-                    switch (job.state()) {
-                        case NEW        -> download(job);
-                        case DOWNLOADED -> transcribe(job);
-                    }
-                    log.info("Этап {} завершён за {} мс: jobId={}",
-                            job.state(), System.currentTimeMillis() - startedAt, job.id());
-                } finally {
-                    // Отмечаем задачу как завершенную
-                    statusService.markJobCompleted(job.id());
-                    MDC.remove("jobId");
-                    MDC.remove(TelegramBot.MDC_CHAT_ID);
+                Optional<ProcessingJob> claimed = jobs.claim();
+                if (claimed.isEmpty()) {
+                    Thread.sleep(pollIntervalMs);
+                    continue;
                 }
+                process(claimed.get());
             } catch (InterruptedException ie) {
                 if (!running) {
                     log.info("Воркер прерван при остановке: {}", Thread.currentThread().getName());
@@ -119,50 +103,83 @@ public class JobWorker {
                         Thread.currentThread().getName(), ie);
                 Thread.currentThread().interrupt();
             } catch (Exception ex) {
+                // Сорваться может и сама работа с базой — тогда пауза важнее
+                // всего: иначе цикл будет крутиться вхолостую и зальёт лог
                 log.error("Ошибка обработки задачи", ex);
+                sleepQuietly();
             }
         }
         log.info("Поток воркера завершён: {}", Thread.currentThread().getName());
     }
 
+    /** jobId/chatId попадают в каждую строку лога этапа — задачу видно насквозь. */
+    private void process(ProcessingJob job) {
+        MDC.put("jobId", job.shortId());
+        if (job.owner().isTelegram()) {
+            MDC.put(TelegramBot.MDC_CHAT_ID, job.owner().id());
+        }
+        long startedAt = System.currentTimeMillis();
+        try {
+            log.info("Начат этап {}: jobId={}", job.stage(), job.shortId());
+            switch (job.stage()) {
+                case DOWNLOAD   -> download(job);
+                case TRANSCRIBE -> transcribe(job);
+            }
+            log.info("Этап {} завершён за {} мс: jobId={}",
+                    job.stage(), System.currentTimeMillis() - startedAt, job.shortId());
+        } finally {
+            MDC.remove("jobId");
+            MDC.remove(TelegramBot.MDC_CHAT_ID);
+        }
+    }
+
     private void download(ProcessingJob job) {
         try {
-            Path file = downloader.download(job.chatId(), job.url(), job.media());
+            // Хранилище пока разложено по чатам; когда появятся аккаунты сайта,
+            // ключом станет владелец целиком
+            Path file = downloader.download(job.owner().telegramChatId(), job.url(), job.media());
             log.info("Скачано {} (downloadId: {})", file, job.downloadId());
-            
-            // Проверяем, является ли это задачей загрузки
+
             if (job.downloadId() != null) {
-                log.info("Обрабатываю задачу загрузки с downloadId: {}", job.downloadId());
+                // Задача чистого скачивания: результат уходит ссылкой, расшифровка не нужна
                 downloadService.handleDownloadComplete(job.downloadId(), file);
+                jobs.complete(job.id(), file);
             } else {
-                log.info("Обрабатываю обычную задачу транскрибирования");
-                // Обычная задача транскрибирования
-                queue.enqueue(job.withFile(file));
+                jobs.moveToTranscribe(job.withFile(file));
             }
         } catch (Exception e) {
             log.error("Ошибка скачивания для URL: {}", job.url(), e);
-            
-            // Проверяем, является ли это задачей загрузки
+            String message = getErrorMessage(job.url(), e);
+            jobs.fail(job.id(), message);
+
             if (job.downloadId() != null) {
-                downloadService.handleDownloadError(job.downloadId(), getErrorMessage(job.url(), e));
+                downloadService.handleDownloadError(job.downloadId(), message);
             } else {
-                // Обычная задача транскрибирования
-                messageSender.sendMessageWithKeyboard(job.chatId(), getErrorMessage(job.url(), e),
-                        null, Keyboards.mainMenu());
+                notifiers.failed(job.owner(), message);
             }
         }
     }
 
     private void transcribe(ProcessingJob job) {
         try {
-            Path txt = transcriber.run(job.chatId(), job.filePath());
+            Path txt = transcriber.run(job.owner().telegramChatId(), job.filePath());
             log.info("Транскрипция готова {}", txt);
-            transcriptDelivery.deliver(job.chatId(), txt);
+            jobs.complete(job.id(), txt);
+            notifiers.transcriptReady(job.owner(), txt);
         } catch (Exception e) {
             log.error("Ошибка транскрипции для файла: {}", job.filePath(), e);
-            messageSender.sendMessageWithKeyboard(job.chatId(),
-                    "❌ Не удалось расшифровать файл. Возможно, он повреждён или в неподдерживаемом формате.",
-                    null, Keyboards.mainMenu());
+            String message = "❌ Не удалось расшифровать файл. "
+                    + "Возможно, он повреждён или в неподдерживаемом формате.";
+            jobs.fail(job.id(), message);
+            notifiers.failed(job.owner(), message);
+        }
+    }
+
+    private void sleepQuietly() {
+        try {
+            Thread.sleep(pollIntervalMs);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -176,10 +193,10 @@ public class JobWorker {
      */
     private String getErrorMessage(String url, Exception e) {
         String detail = e.getMessage();
-        if (detail != null && detail.startsWith("\u274c")) {
+        if (detail != null && detail.startsWith("❌")) {
             return detail;
         }
-        return "\u274c Не удалось обработать ссылку: %s%s".formatted(
+        return "❌ Не удалось обработать ссылку: %s%s".formatted(
                 url, detail != null ? "\n\n" + detail : "");
     }
 }

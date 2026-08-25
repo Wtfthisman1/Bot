@@ -1,7 +1,9 @@
 package Bot;
 
 import org.junit.jupiter.api.Test;
+import Bot.support.PostgresTestContainer;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
 
 /**
@@ -14,6 +16,7 @@ import org.springframework.test.context.TestPropertySource;
  * на которое они рассчитаны.</p>
  */
 @SpringBootTest
+@Import(PostgresTestContainer.class)
 @TestPropertySource(properties = {
         "bot.key=111:TEST_TOKEN_NOT_REAL",
         "admin.chat.id=",

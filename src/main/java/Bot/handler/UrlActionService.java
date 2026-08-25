@@ -17,7 +17,8 @@ package Bot.handler;
 import Bot.download.DownloadService;
 import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
-import Bot.processing.JobQueue;
+import Bot.owner.Owner;
+import Bot.processing.JobStore;
 import Bot.processing.MediaKind;
 import Bot.processing.ProcessingJob;
 import Bot.service.SupportedPlatforms;
@@ -37,7 +38,7 @@ public class UrlActionService {
     /** Больше пяти ссылок за раз очередь принимает, но пользователю столько не нужно. */
     public static final int MAX_URLS_PER_MESSAGE = 5;
 
-    private final JobQueue jobQueue;
+    private final JobStore jobStore;
     private final DownloadService downloadService;
     private final MessageSender messageSender;
     private final SupportedPlatforms supportedPlatforms;
@@ -77,7 +78,7 @@ public class UrlActionService {
 
         for (String url : accepted) {
             switch (mode) {
-                case TRANSCRIBE -> jobQueue.enqueue(ProcessingJob.newLink(chatId, url));
+                case TRANSCRIBE -> jobStore.enqueue(ProcessingJob.newLink(Owner.telegram(chatId), url));
                 case DOWNLOAD -> downloadService.createDownloadTask(chatId, url, userName, media);
             }
         }

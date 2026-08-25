@@ -1,13 +1,15 @@
 package Bot.download;
 
-import Bot.processing.JobQueue;
+import Bot.processing.JobStore;
 import Bot.processing.ProcessingJob;
 import Bot.telegram.MessageSender;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import Bot.support.PostgresTestContainer;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -37,6 +39,7 @@ import static org.mockito.Mockito.verify;
  * URL собирается корректно.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(PostgresTestContainer.class)
 @TestPropertySource(properties = {
         "bot.key=111:TEST_TOKEN_NOT_REAL",
         "admin.chat.id=",
@@ -60,7 +63,7 @@ class DownloadEndpointIT {
     @MockBean MessageSender messageSender;
 
     /** Мок очереди: заодно не даёт воркеру дёрнуть настоящий yt-dlp. */
-    @MockBean JobQueue jobQueue;
+    @MockBean JobStore jobStore;
 
     @Test
     void userCanDownloadTheFileByTheLinkBotSent() throws IOException {
@@ -92,7 +95,7 @@ class DownloadEndpointIT {
                 Bot.processing.MediaKind.VIDEO);
 
         ArgumentCaptor<ProcessingJob> job = ArgumentCaptor.forClass(ProcessingJob.class);
-        verify(jobQueue).enqueue(job.capture());
+        verify(jobStore).enqueue(job.capture());
         return job.getValue().downloadId();
     }
 

@@ -1,6 +1,6 @@
 package Bot.download;
 
-import Bot.processing.JobQueue;
+import Bot.processing.JobStore;
 import Bot.service.SupportedPlatforms;
 import Bot.telegram.MessageSender;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,7 +43,7 @@ class DownloadLinkFlowTest {
 
     @TempDir Path tmp;
 
-    @Mock private JobQueue jobQueue;
+    @Mock private JobStore jobStore;
     @Mock private MessageSender messageSender;
 
     private DownloadTokenRegistry registry;
@@ -60,7 +60,7 @@ class DownloadLinkFlowTest {
         ReflectionTestUtils.setField(registry, "storePath", tmp.resolve("tokens.tsv").toString());
         ReflectionTestUtils.invokeMethod(registry, "load");
 
-        downloadService = new DownloadService(jobQueue, messageSender, registry, new SupportedPlatforms());
+        downloadService = new DownloadService(jobStore, messageSender, registry, new SupportedPlatforms());
         ReflectionTestUtils.setField(downloadService, "downloadBaseUrl", BASE_URL + "/");
         ReflectionTestUtils.setField(downloadService, "telegramMaxBytes", 52_428_800L);
         ReflectionTestUtils.setField(downloadService, "linkTtlHours", 24);
@@ -137,7 +137,7 @@ class DownloadLinkFlowTest {
     private String downloadIdOf(DownloadService.DownloadInfo info) {
         ArgumentCaptor<Bot.processing.ProcessingJob> job =
                 ArgumentCaptor.forClass(Bot.processing.ProcessingJob.class);
-        verify(jobQueue, org.mockito.Mockito.atLeastOnce()).enqueue(job.capture());
+        verify(jobStore, org.mockito.Mockito.atLeastOnce()).enqueue(job.capture());
         return job.getValue().downloadId();
     }
 

@@ -11,8 +11,10 @@
 Description=Transcribot — Telegram-бот расшифровки (Whisper + yt-dlp)
 # Туннель нужен не для запуска, а для ссылок наружу: без сети бот стартует,
 # но ссылки не откроются, поэтому ждём именно поднятую сеть
-After=network-online.target wg-quick@wg0.service
-Wants=network-online.target
+# База живёт в контейнере (docker compose up -d postgres) и стартует вместе с
+# Docker. Без неё бот не поднимется: в базе очередь задач.
+After=network-online.target wg-quick@wg0.service docker.service
+Wants=network-online.target docker.service
 # Три падения подряд за минуту — это не «не повезло», а сломанная конфигурация:
 # бесконечный цикл перезапусков только засорит журнал. Ключи живут в [Unit]:
 # в [Service] systemd их игнорирует.

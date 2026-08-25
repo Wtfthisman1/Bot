@@ -4,7 +4,7 @@ import Bot.download.DownloadService;
 import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
 import Bot.processing.MediaKind;
-import Bot.processing.JobQueue;
+import Bot.processing.JobStore;
 import Bot.processing.ProcessingJob;
 import Bot.service.SupportedPlatforms;
 import Bot.telegram.MessageSender;
@@ -31,7 +31,7 @@ class UrlActionServiceTest {
     private static final long CHAT = 7L;
     private static final String URL = "https://youtu.be/dQw4w9WgXcQ";
 
-    @Mock private JobQueue jobQueue;
+    @Mock private JobStore jobStore;
     @Mock private DownloadService downloadService;
     @Mock private MessageSender messageSender;
     @org.mockito.Spy private SupportedPlatforms supportedPlatforms = new SupportedPlatforms();
@@ -52,7 +52,7 @@ class UrlActionServiceTest {
 
         assertThat(started).isTrue();
         ArgumentCaptor<ProcessingJob> job = ArgumentCaptor.forClass(ProcessingJob.class);
-        verify(jobQueue).enqueue(job.capture());
+        verify(jobStore).enqueue(job.capture());
         assertThat(job.getValue().url()).isEqualTo(URL);
         assertThat(job.getValue().downloadId()).isNull();
         verify(messageSender).sendMessage(CHAT, "✅ Всё запущено, ожидайте.");
@@ -66,7 +66,7 @@ class UrlActionServiceTest {
         assertThat(started).isTrue();
         verify(downloadService).createDownloadTask(CHAT, URL, "Аня", MediaKind.VIDEO);
         verify(messageSender).sendMessage(CHAT, "✅ Всё запущено, ожидайте.");
-        verifyNoInteractions(jobQueue);
+        verifyNoInteractions(jobStore);
     }
 
     @Test
@@ -74,7 +74,7 @@ class UrlActionServiceTest {
         boolean started = service.start(CHAT, download(MediaKind.VIDEO), "http://evil.example/file.mp4", "Аня");
 
         assertThat(started).isFalse();
-        verifyNoInteractions(jobQueue, downloadService);
+        verifyNoInteractions(jobStore, downloadService);
         verify(messageSender).sendMessageWithKeyboard(eq(CHAT), any(), eq(null), any());
         verify(messageSender, never()).sendMessage(anyLong(), any());
     }
@@ -87,7 +87,7 @@ class UrlActionServiceTest {
 
         service.start(CHAT, transcribe(), urls, "Аня");
 
-        verify(jobQueue, org.mockito.Mockito.times(UrlActionService.MAX_URLS_PER_MESSAGE))
+        verify(jobStore, org.mockito.Mockito.times(UrlActionService.MAX_URLS_PER_MESSAGE))
                 .enqueue(any());
         verify(messageSender).sendMessage(CHAT, "✅ Всё запущено, ожидайте.");
     }
@@ -106,7 +106,7 @@ class UrlActionServiceTest {
                 List.of("http://evil.example/x", "https://vimeo.com/123"), "Аня");
 
         ArgumentCaptor<ProcessingJob> job = ArgumentCaptor.forClass(ProcessingJob.class);
-        verify(jobQueue).enqueue(job.capture());
+        verify(jobStore).enqueue(job.capture());
         assertThat(job.getValue().url()).isEqualTo("https://vimeo.com/123");
     }
 }
