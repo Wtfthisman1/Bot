@@ -50,11 +50,14 @@ if [[ -f "/app/libs/bot.jar" ]]; then
 elif [[ -f "/app/libs/demo.jar" ]]; then
     JAR_FILE="/app/libs/demo.jar"
 else
+    # Ищем любой JAR файл в директории libs
     JAR_FILE=$(find /app/libs -name "*.jar" | head -1)
 fi
 
 if [[ -z "$JAR_FILE" ]]; then
     log "ERROR: JAR файл не найден в /app/libs/"
+    log "Содержимое директории /app/libs/:"
+    ls -la /app/libs/ 2>/dev/null || log "Директория /app/libs/ не существует"
     exit 1
 fi
 log "Найден JAR файл: $JAR_FILE"

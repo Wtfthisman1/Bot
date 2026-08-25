@@ -20,6 +20,51 @@ SERVER_HOST=${SERVER_HOST:-"REDACTED_IP"}
 SERVER_USER=${SERVER_USER:-"root"}
 SERVER_PASS=${SERVER_PASS:-"REDACTED_PASSWORD"}
 
+# Проверка зависимостей
+check_dependencies() {
+    log "Проверяем зависимости..."
+    
+    # Проверяем наличие gradlew
+    if [[ ! -f "./gradlew" ]]; then
+        error "Файл gradlew не найден. Убедитесь, что вы находитесь в корневой директории проекта."
+    fi
+    
+    # Проверяем права на выполнение gradlew
+    if [[ ! -x "./gradlew" ]]; then
+        log "Устанавливаем права на выполнение gradlew..."
+        chmod +x ./gradlew
+    fi
+    
+    # Проверяем наличие .env файла
+    if [[ ! -f ".env" ]]; then
+        if [[ -f "env.example" ]]; then
+            warn "Файл .env не найден, но найден env.example"
+            log "Создаем .env из env.example..."
+            cp env.example .env
+            warn "Пожалуйста, отредактируйте .env файл с вашими настройками перед деплоем"
+            read -p "Продолжить деплой? (y/N): " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                error "Деплой отменен пользователем"
+            fi
+        else
+            error "Файлы .env и env.example не найдены"
+        fi
+    fi
+    
+    # Проверяем наличие docker-compose.yml
+    if [[ ! -f "docker-compose.yml" ]]; then
+        error "Файл docker-compose.yml не найден"
+    fi
+    
+    # Проверяем наличие Dockerfile
+    if [[ ! -f "Dockerfile" ]]; then
+        error "Файл Dockerfile не найден"
+    fi
+    
+    success "Все зависимости проверены"
+}
+
 # Функция для выполнения команд на сервере с таймаутом
 run_on_server() {
     local cmd="$1"
@@ -75,59 +120,124 @@ check_server_connection() {
     success "Подключение к серверу работает"
 }
 
-# 1. Собираем bootJar
-log "🔨 Собираем bootJar..."
-if ! ./gradlew bootJar; then
-    error "Ошибка сборки JAR файла"
-fi
-success "JAR собран"
+# Функция для подготовки сервера
+prepare_server() {
+    log "Подготавливаем сервер..."
+    
+    # Проверяем наличие Docker на сервере
+    run_on_server "docker --version" 30
+    
+    # Проверяем наличие docker-compose на сервере
+    run_on_server "docker-compose --version" 30
+    
+    # Создаем директорию проекта если её нет
+    run_on_server "mkdir -p /root/Bot" 30
+    
+    success "Сервер подготовлен"
+}
 
-# 2. Коммитим и пушим
-log "📤 Пушим в Git..."
-if ! git add .; then
-    error "Ошибка добавления файлов в git"
-fi
+# Функция для копирования файлов на сервер
+copy_files_to_server() {
+    log "Копируем файлы на сервер..."
+    
+    # Создаем временную директорию для копирования
+    local temp_dir="/tmp/bot_deploy_$(date +%s)"
+    
+    # Копируем все необходимые файлы
+    if ! rsync -avz --delete \
+        -e "sshpass -p '$SERVER_PASS' ssh -o StrictHostKeyChecking=no" \
+        --exclude='.git' \
+        --exclude='build' \
+        --exclude='.gradle' \
+        --exclude='logs' \
+        --exclude='upload' \
+        ./ "$SERVER_USER@$SERVER_HOST:$temp_dir/"; then
+        error "Ошибка копирования файлов на сервер"
+    fi
+    
+    # Перемещаем файлы в рабочую директорию
+    run_on_server "rm -rf /root/Bot && mv $temp_dir /root/Bot" 60
+    
+    success "Файлы скопированы на сервер"
+}
 
-if ! git commit -m "Deploy: $(date +'%Y-%m-%d %H:%M:%S')"; then
-    warn "Нет изменений для коммита"
-fi
+# Основной процесс деплоя
+main() {
+    log "🚀 Начинаем деплой бота..."
+    
+    # 1. Проверяем зависимости
+    check_dependencies
+    
+    # 2. Собираем bootJar
+    log "🔨 Собираем bootJar..."
+    if ! ./gradlew clean bootJar; then
+        error "Ошибка сборки JAR файла"
+    fi
+    
+    # Проверяем, что JAR создался
+    if [[ ! -f "build/libs/bot.jar" ]]; then
+        error "JAR файл не найден в build/libs/bot.jar"
+    fi
+    
+    success "JAR собран: build/libs/bot.jar"
+    
+    # 3. Коммитим и пушим
+    log "📤 Пушим в Git..."
+    if ! git add .; then
+        error "Ошибка добавления файлов в git"
+    fi
 
-if ! git push; then
-    error "Ошибка пуша в Git"
-fi
-success "Код запушен"
+    if ! git commit -m "Deploy: $(date +'%Y-%m-%d %H:%M:%S')"; then
+        warn "Нет изменений для коммита"
+    fi
 
-# 3. Проверяем подключение к серверу
-check_server_connection
+    if ! git push; then
+        error "Ошибка пуша в Git"
+    fi
+    success "Код запушен"
 
-# 4. Обновляем код на сервере
-log "📥 Обновляем код на сервере..."
-run_on_server "cd /root/Bot && git pull" 60
-success "Код обновлен"
+    # 4. Проверяем подключение к серверу
+    check_server_connection
+    
+    # 5. Подготавливаем сервер
+    prepare_server
+    
+    # 6. Копируем файлы на сервер
+    copy_files_to_server
 
-# 5. Останавливаем контейнер
-log "🛑 Останавливаем контейнер..."
-run_on_server "cd /root/Bot && docker-compose down" 30
-success "Контейнер остановлен"
+    # 7. Обновляем код на сервере (если используется git)
+    log "📥 Обновляем код на сервере..."
+    run_on_server "cd /root/Bot && git pull" 60
+    success "Код обновлен"
 
-# 6. Пересобираем контейнер
-log "🔨 Пересобираем контейнер..."
-run_on_server "cd /root/Bot && docker-compose build --no-cache" 300
-success "Контейнер пересобран"
+    # 8. Останавливаем контейнер
+    log "🛑 Останавливаем контейнер..."
+    run_on_server "cd /root/Bot && docker-compose down" 30
+    success "Контейнер остановлен"
 
-# 7. Запускаем контейнер
-log "🚀 Запускаем контейнер..."
-run_on_server "cd /root/Bot && docker-compose up -d" 60
-success "Контейнер запущен"
+    # 9. Пересобираем контейнер
+    log "🔨 Пересобираем контейнер..."
+    run_on_server "cd /root/Bot && docker-compose build --no-cache" 300
+    success "Контейнер пересобран"
 
-# 8. Ждем запуска и проверяем статус
-log "⏳ Ждем запуска приложения..."
-sleep 10
+    # 10. Запускаем контейнер
+    log "🚀 Запускаем контейнер..."
+    run_on_server "cd /root/Bot && docker-compose up -d" 60
+    success "Контейнер запущен"
 
-log "🔍 Проверяем статус контейнеров..."
-run_on_server "cd /root/Bot && docker-compose ps" 30
+    # 11. Ждем запуска и проверяем статус
+    log "⏳ Ждем запуска приложения..."
+    sleep 15
 
-log "🔍 Проверяем логи приложения..."
-run_on_server "cd /root/Bot && docker-compose logs --tail=10 bot" 30
+    log "🔍 Проверяем статус контейнеров..."
+    run_on_server "cd /root/Bot && docker-compose ps" 30
 
-success "🎉 Деплой завершен успешно!"
+    log "🔍 Проверяем логи приложения..."
+    run_on_server "cd /root/Bot && docker-compose logs --tail=20 bot" 30
+
+    success "🎉 Деплой завершен успешно!"
+    log "🌐 Приложение доступно по адресу: http://$SERVER_HOST:8080"
+}
+
+# Запуск основного процесса
+main "$@"

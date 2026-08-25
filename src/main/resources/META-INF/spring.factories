@@ -1,0 +1,3 @@
+# Регистрирует EnvironmentPostProcessor, который грузит .env до создания контекста.
+org.springframework.boot.env.EnvironmentPostProcessor=\
+  Bot.config.DotenvEnvironmentPostProcessor

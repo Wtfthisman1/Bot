@@ -4,33 +4,76 @@
     <!-- ───── appenders ───── -->
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <!-- Построчный вывод yt-dlp/Whisper идёт в DEBUG и оседает в логе задачи;
+             в консоли нужен только ход дела, иначе прогресс забивает всё.
+             LOG_LEVEL управляет ИМЕННО видимостью в консоли, а не уровнем логгера -->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>${LOG_LEVEL:-INFO}</level>
+        </filter>
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} – %msg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} [chat=%X{chatId:-—} job=%X{jobId:-—}] – %msg%n</pattern>
         </encoder>
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <!-- каталог создаём сами; при первом запуске mkdir logs -->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>${LOG_LEVEL:-INFO}</level>
+        </filter>
         <file>logs/app.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
             <fileNamePattern>logs/app.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>60</maxHistory>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} – %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} [chat=%X{chatId:-—} job=%X{jobId:-—}] – %msg%n</pattern>
         </encoder>
     </appender>
 
-    <appender name="TELEGRAM" class="com.example.demo.logging.TelegramLogAppender">
+    <!--
+        Отдельный файл на каждую задачу: logs/jobs/job-<id>.log.
+        При двух параллельных заданиях общий лог перемешивается, и разобрать,
+        что происходило с конкретной расшифровкой, практически нельзя.
+        Ключ берётся из MDC jobId, который проставляет JobWorker.
+    -->
+    <appender name="JOB" class="ch.qos.logback.classic.sift.SiftingAppender">
+        <filter class="Bot.logging.JobIdFilter"/>
+        <discriminator>
+            <key>jobId</key>
+            <defaultValue>none</defaultValue>
+        </discriminator>
+        <sift>
+            <appender name="JOB-${jobId}" class="ch.qos.logback.core.FileAppender">
+                <file>logs/jobs/job-${jobId}.log</file>
+                <append>true</append>
+                <encoder>
+                    <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{28} – %msg%n</pattern>
+                </encoder>
+            </appender>
+        </sift>
+    </appender>
+
+    <appender name="TELEGRAM" class="Bot.telegram.TelegramLogAppender">
         <param name="adminChatId" value="${admin.chat.id}"/>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
             <level>ERROR</level>
         </filter>
     </appender>
 
-    <logger name="com.example.demo" level="DEBUG" additivity="false">
+    <!--
+        DEBUG здесь — не отладочный режим, а рабочий: построчный вывод yt-dlp и
+        Whisper пишется в DEBUG и должен доходить до лога задачи. Консоль и
+        app.log при этом фильтруются по LOG_LEVEL, поэтому не засоряются.
+
+        Свойство logging.level.Bot намеренно НЕ задаётся в application.properties:
+        Spring Boot применяет его уже после загрузки этого файла и перекрыл бы
+        уровень логгера. С LOG_LEVEL=INFO в .env это молча выключало бы всю
+        детализацию в logs/jobs/job-*.log.
+    -->
+    <logger name="Bot" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
+        <appender-ref ref="JOB"/>
         <appender-ref ref="TELEGRAM"/>
     </logger>
 

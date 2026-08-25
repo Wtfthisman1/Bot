@@ -1,0 +1,61 @@
+# nginx на VPS: единственная задача — проксировать запросы домой по WireGuard.
+# Файлы на VPS не хранятся и не буферизуются, он только гоняет байты.
+#
+# Плейсхолдеры: FILES_DOMAIN — ваш домен, HOME_WG_IP — адрес домашней машины
+# внутри туннеля (по умолчанию 10.8.0.2).
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name FILES_DOMAIN www.FILES_DOMAIN;
+
+    # Место, куда certbot кладёт подтверждение владения доменом
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    # Директива http2 сменила форму в nginx 1.25: до неё — флаг внутри listen,
+    # после — отдельная строка. Обе строки listen подставляет setup-vps.sh по
+    # версии nginx, иначе на Ubuntu 24.04 (nginx 1.24) конфиг не проходит проверку.
+    LISTEN_443_BLOCK
+    server_name FILES_DOMAIN www.FILES_DOMAIN;
+
+    ssl_certificate     /etc/letsencrypt/live/FILES_DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/FILES_DOMAIN/privkey.pem;
+
+    # Форма принимает файлы до 2500 МБ. Без этой строки nginx рубит запрос
+    # своим дефолтом в 1 МБ — та же болезнь, что была у Cloudflare со 100 МБ,
+    # только здесь предел задаём мы сами.
+    client_max_body_size 2500m;
+
+    # Не копить тело запроса на диске VPS (там всего 10 ГБ) — сразу домой
+    proxy_request_buffering off;
+    # Не копить ответ — отдача видео идёт потоком, иначе первый байт
+    # пользователь увидит только после полной перекачки файла на VPS
+    proxy_buffering off;
+
+    # Отдача 600 МБ на медленный мобильный канал идёт долго; дефолтные
+    # 60 секунд оборвали бы скачивание на середине
+    proxy_connect_timeout 30s;
+    proxy_send_timeout    30m;
+    proxy_read_timeout    30m;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # ── Наружу открыты ТОЛЬКО эти два маршрута ──
+    location /download/ { proxy_pass http://HOME_WG_IP:8080; }
+    location /upload/   { proxy_pass http://HOME_WG_IP:8080; }
+
+    # Всё остальное не выходит наружу. Actuator и так слушает отдельный порт
+    # на 127.0.0.1, но полагаться на одну преграду не стоит.
+    location / { return 404; }
+
+    access_log /var/log/nginx/bot-access.log;
+    error_log  /var/log/nginx/bot-error.log;
+}

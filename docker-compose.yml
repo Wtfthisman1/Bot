@@ -14,6 +14,10 @@ services:
       
       # URL для загрузок
       - UPLOAD_BASE_URL=${UPLOAD_BASE_URL}
+      # Без этого ссылка на скачивание указывала бы на localhost внутри контейнера
+      - DOWNLOAD_BASE_URL=${DOWNLOAD_BASE_URL}
+      # Реестр download-токенов на смонтированном томе — ссылки переживают перезапуск
+      - DOWNLOAD_TOKEN_STORE=/app/upload/download-tokens.tsv
       
       # Предзагрузка моделей Whisper
       - WHISPER_PRELOAD_MODELS=medium
@@ -37,7 +41,7 @@ services:
       - whisper_cache:/app/.cache
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8081/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 3

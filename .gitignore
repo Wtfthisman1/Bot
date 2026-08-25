@@ -1,61 +1,55 @@
-# .gitignore
-
-# Исключаем временные, бинарные и тяжёлые файлы
-*.mp4
-*.mkv
-*.wav
-*.zip
-*.tar.gz
-*.log
-*.bak
-*.tmp
-*.ogg
-__pycache__/
-*.class
-.idea/
-.vscode/
-.env
 target/
-node_modules/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+.kotlin
 
-# Каталоги с видео и транскрипциями
-/upload/
-download/
-transcripts/
-
-# Gradle
-.gradle/
-build/
-out/
-
-# IDE
+### IntelliJ IDEA ###
+.idea/modules.xml
+.idea/jarRepositories.xml
+.idea/compiler.xml
+.idea/libraries/
+*.iws
 *.iml
 *.ipr
-*.iws
 
-# OS
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
 .DS_Store
-Thumbs.db
-
-# Temporary files
-*.swp
-*.swo
-*~
-
-# Python
-*.pyc
-*.pyo
-__pycache__/
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Logs
-logs/
-*.log
-
-# Environment files
+### Локальная конфигурация ###
+# Содержит BOT_TOKEN — в репозиторий не должен попадать никогда
 .env
-.env.local
-.env.production
-temp.env
+.env.bak-*
+logs/
+
+### Gradle / IDE ###
+.gradle/
+.idea/
+out/
+
+### Пользовательские файлы: медиа, транскрипты, токены ###
+# Каталог с чужими видео — сотни мегабайт, в репозиторий не должен попадать
+/upload/
+/download/
+/transcripts/
