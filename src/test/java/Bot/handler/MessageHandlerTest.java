@@ -3,10 +3,8 @@ package Bot.handler;
 import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
 import Bot.processing.MediaKind;
+import Bot.home.HomeApi;
 import Bot.telegram.MessageSender;
-import Bot.telegram.TelegramFileDownloader;
-import Bot.processing.JobStore;
-import Bot.upload.UploadService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,10 +32,8 @@ class MessageHandlerTest {
     private static final long CHAT = 11L;
     private static final String URL = "https://youtu.be/dQw4w9WgXcQ";
 
-    @Mock private JobStore jobStore;
-    @Mock private TelegramFileDownloader fileDownloader;
+    @Mock private HomeApi home;
     @Mock private MessageSender messageSender;
-    @Mock private UploadService uploadService;
     @Mock private UrlActionService urlActionService;
     @Mock private CommandHandler commandHandler;
 
@@ -46,8 +42,8 @@ class MessageHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new MessageHandler(new SyncTaskExecutor(), jobStore, fileDownloader,
-                messageSender, uploadService, sessions, urlActionService, commandHandler);
+        handler = new MessageHandler(new SyncTaskExecutor(), home,
+                messageSender, sessions, urlActionService, commandHandler);
     }
 
     @Test

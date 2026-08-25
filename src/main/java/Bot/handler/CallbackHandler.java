@@ -14,9 +14,10 @@ package Bot.handler;
  */
 import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
+import Bot.home.HomeApi;
+import Bot.owner.Owner;
 import Bot.processing.MediaKind;
 import Bot.telegram.Keyboards;
-import Bot.transcription.TranscriptDeliveryService;
 import Bot.transcription.TranscriptFormat;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,7 +33,7 @@ public class CallbackHandler {
     private final UserSessionService sessionService;
     private final UrlActionService urlActionService;
     private final CommandHandler commandHandler;
-    private final TranscriptDeliveryService transcriptDelivery;
+    private final HomeApi home;
 
     public void handle(long chatId, String callbackData, String userName) {
         if (callbackData == null || callbackData.isBlank()) {
@@ -92,7 +93,7 @@ public class CallbackHandler {
         }
 
         log.info("Запрошен формат расшифровки: chatId={}, формат={}", chatId, format.get());
-        transcriptDelivery.sendFormat(chatId, parts[2], format.get());
+        home.sendTranscript(Owner.telegram(chatId), parts[2], format.get());
     }
 
     /**

@@ -94,8 +94,8 @@ class DownloadEndpointIT {
 
     /** downloadId наружу не торчит — перехватываем задачу по пути в очередь. */
     private String startDownload() {
-        downloadService.createDownloadTask(CHAT, "https://youtu.be/dQw4w9WgXcQ", "Аня",
-                Bot.processing.MediaKind.VIDEO);
+        downloadService.createDownloadTask(Bot.owner.Owner.telegram(CHAT),
+                "https://youtu.be/dQw4w9WgXcQ", Bot.processing.MediaKind.VIDEO);
 
         ArgumentCaptor<ProcessingJob> job = ArgumentCaptor.forClass(ProcessingJob.class);
         verify(jobStore).enqueue(job.capture());

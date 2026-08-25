@@ -8,20 +8,19 @@ package Bot.handler;
  * {@link UserSessionService} + {@link UrlActionService}: здесь нет ни текстовых
  * «транскрибировать/скачать», ни разбора callback — только маршрутизация.</p>
  *
- * <p>Связан с {@link TelegramFileDownloader}, {@link JobStore},
- * {@link MessageSender}, {@link UploadService}. Основные методы:
+ * <p>Связан с {@link HomeApi} (туда уходит вся работа), {@link MessageSender}
+ * и {@link UserSessionService}. Основные методы:
  * {@code handleText}, {@code handleVoice}, {@code handleAudio},
  * {@code handleVideo}, {@code handleDocument}.</p>
  */
 import Bot.handler.UserSessionService.Pending;
+import Bot.home.HomeApi;
+import Bot.home.HomeApi.TelegramFile;
 import Bot.telegram.FileTooLargeException;
 import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
 import Bot.telegram.TelegramFileDownloader;
 import Bot.owner.Owner;
-import Bot.processing.JobStore;
-import Bot.processing.ProcessingJob;
-import Bot.upload.UploadService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskExecutor;
@@ -31,7 +30,6 @@ import org.telegram.telegrambots.meta.api.objects.Document;
 import org.telegram.telegrambots.meta.api.objects.Video;
 import org.telegram.telegrambots.meta.api.objects.Voice;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -50,10 +48,8 @@ public class MessageHandler {
             List.of(".mp4", ".avi", ".mkv", ".mov", ".webm");
 
     private final TaskExecutor taskExecutor;
-    private final JobStore jobStore;
-    private final TelegramFileDownloader fileDownloader;
+    private final HomeApi home;
     private final MessageSender messageSender;
-    private final UploadService uploadService;
     private final UserSessionService sessionService;
     private final UrlActionService urlActionService;
     private final CommandHandler commandHandler;
@@ -104,7 +100,7 @@ public class MessageHandler {
         log.info("Получено голосовое: chatId={}, длительность={}с, размер={}",
                 chatId, voice.getDuration(), voice.getFileSize());
         transcribeMedia(chatId, voice.getFileSize(), "🎤 Голосовое получено. Расшифровываю...",
-                () -> fileDownloader.downloadVoice(voice.getFileId(), chatId));
+                new TelegramFile(voice.getFileId(), "voice.ogg", TelegramFile.Kind.VOICE));
     }
 
     public void handleAudio(long chatId, Audio audio, String name) {
@@ -112,7 +108,7 @@ public class MessageHandler {
                 chatId, audio.getFileName(), audio.getFileSize());
         String fileName = audio.getFileName() != null ? audio.getFileName() : "audio.mp3";
         transcribeMedia(chatId, audio.getFileSize(), "🎵 Аудио получено. Расшифровываю...",
-                () -> fileDownloader.downloadAudio(audio.getFileId(), chatId, fileName));
+                new TelegramFile(audio.getFileId(), fileName, TelegramFile.Kind.AUDIO));
     }
 
     public void handleVideo(long chatId, Video video, String name) {
@@ -120,7 +116,7 @@ public class MessageHandler {
                 chatId, video.getFileName(), video.getFileSize());
         String fileName = video.getFileName() != null ? video.getFileName() : "video.mp4";
         transcribeMedia(chatId, video.getFileSize(), "🎬 Видео получено. Расшифровываю...",
-                () -> fileDownloader.downloadVideo(video.getFileId(), chatId, fileName));
+                new TelegramFile(video.getFileId(), fileName, TelegramFile.Kind.VIDEO));
     }
 
     public void handleDocument(long chatId, Document document, String name) {
@@ -136,23 +132,27 @@ public class MessageHandler {
         }
 
         transcribeMedia(chatId, document.getFileSize(), "📄 Файл получен. Расшифровываю...",
-                () -> fileDownloader.downloadDocument(document.getFileId(), chatId, fileName));
+                new TelegramFile(document.getFileId(), fileName, TelegramFile.Kind.DOCUMENT));
     }
 
     /* ───────────────── общая механика ───────────────── */
 
     /**
-     * Общий путь для всех медиа: проверка лимита → подтверждение → фоновое
-     * скачивание из Telegram → постановка в очередь.
+     * Общий путь для всех медиа: проверка лимита → подтверждение → передача
+     * файла домой.
      *
      * <p>Раньше эти шаги были скопированы в каждом {@code handleXxx};
      * различались только тексты и способ скачивания — они и остались параметрами.</p>
      *
-     * <p>Расшифровка идёт через общую очередь, а не прямо здесь: своим путём
-     * она не переживала перезапуск и не попадала в «Статус» — пользователь
-     * видел «активных задач нет», пока файл считался.</p>
+     * <p>Домой уходит {@code fileId}, а не содержимое: файл забирает у Bot API
+     * та машина, где он и будет считаться. Иначе запись прошла бы лишний круг
+     * через VPS, который её всё равно не хранит.</p>
+     *
+     * <p>Фоновый поток нужен потому, что дом успевает и скачать файл, и
+     * положить его в очередь, — на это уходят секунды, а ответ пользователю
+     * должен уйти сразу.</p>
      */
-    private void transcribeMedia(long chatId, Long fileSize, String ack, MediaDownload download) {
+    private void transcribeMedia(long chatId, Long fileSize, String ack, TelegramFile file) {
         if (tooLargeForBot(chatId, fileSize)) {
             return;
         }
@@ -163,8 +163,7 @@ public class MessageHandler {
 
         taskExecutor.execute(() -> {
             try {
-                Path media = download.get();
-                jobStore.enqueue(ProcessingJob.newFile(Owner.telegram(chatId), media));
+                home.transcribeTelegramFile(Owner.telegram(chatId), file);
             } catch (FileTooLargeException e) {
                 log.info("Файл превысил лимит Bot API: chatId={}", chatId);
                 sendUploadFormOffer(chatId, fileSize);
@@ -174,12 +173,6 @@ public class MessageHandler {
                         null, Keyboards.mainMenu());
             }
         });
-    }
-
-    /** Скачивание файла из Telegram; бросает проверяемые исключения, поэтому не {@code Supplier}. */
-    @FunctionalInterface
-    private interface MediaDownload {
-        Path get() throws Exception;
     }
 
     /**
@@ -217,7 +210,8 @@ public class MessageHandler {
                 • До 5 файлов, до 2500 МБ каждый
                 • Ссылка одноразовая, действует 1 час
                 • Расшифровка придёт сюда, в чат
-                """.formatted(sizeLine, MessageSender.escapeHtml(uploadService.generate(chatId)));
+                """.formatted(sizeLine,
+                MessageSender.escapeHtml(home.uploadFormLink(Owner.telegram(chatId))));
 
         messageSender.sendMessage(chatId, message.strip(), "HTML");
     }

@@ -12,15 +12,13 @@ package Bot.handler;
  * <p>Раньше эту роль делил {@code ActionChoiceService}, который доставал
  * {@code MessageHandler} через {@code ApplicationContext.getBean} — обход
  * циклической зависимости. Зависимость разорвана по-настоящему: сервис знает
- * только про очередь и загрузчик.</p>
+ * только про {@link HomeApi} — и не знает, где эта очередь физически стоит.</p>
  */
-import Bot.download.DownloadService;
 import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
+import Bot.home.HomeApi;
 import Bot.owner.Owner;
-import Bot.processing.JobStore;
 import Bot.processing.MediaKind;
-import Bot.processing.ProcessingJob;
 import Bot.service.SupportedPlatforms;
 import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
@@ -38,8 +36,7 @@ public class UrlActionService {
     /** Больше пяти ссылок за раз очередь принимает, но пользователю столько не нужно. */
     public static final int MAX_URLS_PER_MESSAGE = 5;
 
-    private final JobStore jobStore;
-    private final DownloadService downloadService;
+    private final HomeApi home;
     private final MessageSender messageSender;
     private final SupportedPlatforms supportedPlatforms;
 
@@ -76,15 +73,16 @@ public class UrlActionService {
             return false;
         }
 
+        Owner owner = Owner.telegram(chatId);
         for (String url : accepted) {
             switch (mode) {
-                case TRANSCRIBE -> jobStore.enqueue(ProcessingJob.newLink(Owner.telegram(chatId), url));
-                case DOWNLOAD -> downloadService.createDownloadTask(chatId, url, userName, media);
+                case TRANSCRIBE -> home.transcribeLink(owner, url);
+                case DOWNLOAD -> home.downloadLink(owner, url, media);
             }
         }
 
-        log.info("Запущено действие {} ({}): chatId={}, ссылок={}",
-                mode, media, chatId, accepted.size());
+        log.info("Запущено действие {} ({}): chatId={}, кто={}, ссылок={}",
+                mode, media, chatId, userName, accepted.size());
         messageSender.sendMessage(chatId, "✅ Всё запущено, ожидайте.");
         return true;
     }

@@ -138,8 +138,8 @@ class DownloadLinkFlowTest {
 
     /** downloadId наружу не торчит — берём его из задачи, ушедшей в очередь. */
     private String startDownload() {
-        downloadService.createDownloadTask(CHAT, "https://youtu.be/dQw4w9WgXcQ", "Аня",
-                Bot.processing.MediaKind.VIDEO);
+        downloadService.createDownloadTask(Bot.owner.Owner.telegram(CHAT),
+                "https://youtu.be/dQw4w9WgXcQ", Bot.processing.MediaKind.VIDEO);
         return enqueued.get(enqueued.size() - 1).downloadId();
     }
 

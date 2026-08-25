@@ -1,16 +1,14 @@
 package Bot.handler;
 
-import Bot.download.DownloadService;
 import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
+import Bot.home.HomeApi;
+import Bot.owner.Owner;
 import Bot.processing.MediaKind;
-import Bot.processing.JobStore;
-import Bot.processing.ProcessingJob;
 import Bot.service.SupportedPlatforms;
 import Bot.telegram.MessageSender;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -30,9 +28,9 @@ class UrlActionServiceTest {
 
     private static final long CHAT = 7L;
     private static final String URL = "https://youtu.be/dQw4w9WgXcQ";
+    private static final Owner OWNER = Owner.telegram(CHAT);
 
-    @Mock private JobStore jobStore;
-    @Mock private DownloadService downloadService;
+    @Mock private HomeApi home;
     @Mock private MessageSender messageSender;
     @org.mockito.Spy private SupportedPlatforms supportedPlatforms = new SupportedPlatforms();
 
@@ -51,12 +49,9 @@ class UrlActionServiceTest {
         boolean started = service.start(CHAT, transcribe(), URL, "Аня");
 
         assertThat(started).isTrue();
-        ArgumentCaptor<ProcessingJob> job = ArgumentCaptor.forClass(ProcessingJob.class);
-        verify(jobStore).enqueue(job.capture());
-        assertThat(job.getValue().url()).isEqualTo(URL);
-        assertThat(job.getValue().downloadId()).isNull();
+        verify(home).transcribeLink(OWNER, URL);
         verify(messageSender).sendMessage(CHAT, "✅ Всё запущено, ожидайте.");
-        verifyNoInteractions(downloadService);
+        verify(home, never()).downloadLink(any(), any(), any());
     }
 
     @Test
@@ -64,9 +59,9 @@ class UrlActionServiceTest {
         boolean started = service.start(CHAT, download(MediaKind.VIDEO), URL, "Аня");
 
         assertThat(started).isTrue();
-        verify(downloadService).createDownloadTask(CHAT, URL, "Аня", MediaKind.VIDEO);
+        verify(home).downloadLink(OWNER, URL, MediaKind.VIDEO);
         verify(messageSender).sendMessage(CHAT, "✅ Всё запущено, ожидайте.");
-        verifyNoInteractions(jobStore);
+        verify(home, never()).transcribeLink(any(), any());
     }
 
     @Test
@@ -74,7 +69,7 @@ class UrlActionServiceTest {
         boolean started = service.start(CHAT, download(MediaKind.VIDEO), "http://evil.example/file.mp4", "Аня");
 
         assertThat(started).isFalse();
-        verifyNoInteractions(jobStore, downloadService);
+        verifyNoInteractions(home);
         verify(messageSender).sendMessageWithKeyboard(eq(CHAT), any(), eq(null), any());
         verify(messageSender, never()).sendMessage(anyLong(), any());
     }
@@ -87,8 +82,8 @@ class UrlActionServiceTest {
 
         service.start(CHAT, transcribe(), urls, "Аня");
 
-        verify(jobStore, org.mockito.Mockito.times(UrlActionService.MAX_URLS_PER_MESSAGE))
-                .enqueue(any());
+        verify(home, org.mockito.Mockito.times(UrlActionService.MAX_URLS_PER_MESSAGE))
+                .transcribeLink(eq(OWNER), any());
         verify(messageSender).sendMessage(CHAT, "✅ Всё запущено, ожидайте.");
     }
 
@@ -97,7 +92,7 @@ class UrlActionServiceTest {
     void chosenMediaKindReachesTheDownloadTask() {
         service.start(CHAT, download(MediaKind.AUDIO), URL, "Аня");
 
-        verify(downloadService).createDownloadTask(CHAT, URL, "Аня", MediaKind.AUDIO);
+        verify(home).downloadLink(OWNER, URL, MediaKind.AUDIO);
     }
 
     @Test
@@ -105,8 +100,7 @@ class UrlActionServiceTest {
         service.start(CHAT, transcribe(),
                 List.of("http://evil.example/x", "https://vimeo.com/123"), "Аня");
 
-        ArgumentCaptor<ProcessingJob> job = ArgumentCaptor.forClass(ProcessingJob.class);
-        verify(jobStore).enqueue(job.capture());
-        assertThat(job.getValue().url()).isEqualTo("https://vimeo.com/123");
+        verify(home).transcribeLink(OWNER, "https://vimeo.com/123");
+        verify(home, never()).transcribeLink(OWNER, "http://evil.example/x");
     }
 }

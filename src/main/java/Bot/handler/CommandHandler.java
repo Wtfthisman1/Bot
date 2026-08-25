@@ -8,28 +8,29 @@ package Bot.handler;
  * ({@code /start}), и нажатие кнопки ({@link CallbackHandler}) приводят к
  * одному и тому же результату: тексты не расходятся между двумя путями.</p>
  *
- * <p>Связан с {@link UploadService}, {@link StatusService}, {@link MessageSender},
- * {@link UserSessionService}.</p>
+ * <p>Связан с {@link HomeApi} (ссылка на форму и сводка задач приходят оттуда),
+ * {@link MessageSender}, {@link UserSessionService}.</p>
  */
-import Bot.download.DownloadService;
 import Bot.handler.UserSessionService.Mode;
+import Bot.home.HomeApi;
+import Bot.owner.Owner;
 import Bot.processing.MediaKind;
-import Bot.service.StatusService;
 import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
-import Bot.upload.UploadService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.time.Instant;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CommandHandler {
 
-    private final UploadService uploadService;
+    private final HomeApi home;
     private final MessageSender messageSender;
-    private final StatusService statusService;
     private final UserSessionService sessionService;
 
     /** Маршрутизация текстовых команд на те же экраны, что и кнопки. */
@@ -121,7 +122,7 @@ public class CommandHandler {
     public void upload(long chatId) {
         messageSender.sendChatAction(chatId, "typing");
 
-        String link = uploadService.generate(chatId);
+        String link = home.uploadFormLink(Owner.telegram(chatId));
         log.info("Выдана ссылка на форму загрузки: chatId={}", chatId);
 
         String html = """
@@ -139,23 +140,23 @@ public class CommandHandler {
     /** Короткая сводка по задачам пользователя. */
     public void status(long chatId) {
         try {
-            StatusService.UserStatus status = statusService.getUserStatus(chatId);
+            HomeApi.OwnerStatus status = home.status(Owner.telegram(chatId));
 
-            if (status.totalTasks() == 0 && status.activeDownloads() == 0) {
+            if (status.total() == 0 && status.downloads().isEmpty()) {
                 showMenu(chatId, "🎉 Активных задач нет.\n\nВыберите действие:");
                 return;
             }
 
             StringBuilder message = new StringBuilder("📊 <b>Статус обработки</b>\n\n")
-                    .append("⏳ Ожидает загрузки: ").append(status.pendingTasks()).append('\n')
-                    .append("🔄 Ожидает транскрипции: ").append(status.processingTasks()).append('\n')
-                    .append("📥 Активных загрузок: ").append(status.activeDownloads()).append('\n')
-                    .append("📋 Всего задач: ").append(status.totalTasks()).append('\n');
+                    .append("⏳ Ожидает загрузки: ").append(status.queued()).append('\n')
+                    .append("🔄 Ожидает транскрипции: ").append(status.running()).append('\n')
+                    .append("📥 Активных загрузок: ").append(status.downloads().size()).append('\n')
+                    .append("📋 Всего задач: ").append(status.total()).append('\n');
 
-            if (status.activeDownloads() > 0) {
+            if (!status.downloads().isEmpty()) {
                 message.append("\n🔗 <b>Скачивается сейчас:</b>\n");
-                for (DownloadService.DownloadInfo download : status.downloads()) {
-                    long minutes = (System.currentTimeMillis() - download.startTime()) / 60_000;
+                for (HomeApi.ActiveDownload download : status.downloads()) {
+                    long minutes = Duration.between(download.startedAt(), Instant.now()).toMinutes();
                     message.append("• ").append(MessageSender.escapeHtml(download.url()))
                             .append(" (").append(minutes).append(" мин)\n");
                 }
@@ -165,6 +166,8 @@ public class CommandHandler {
             messageSender.sendMessageWithKeyboard(chatId, message.toString(), "HTML", Keyboards.mainMenu());
 
         } catch (Exception e) {
+            // Статус — вспомогательный экран: молчать хуже, чем признаться,
+            // что сводку сейчас не достать
             log.error("Ошибка получения статуса: chatId={}", chatId, e);
             messageSender.sendMessage(chatId, "❌ Не удалось получить статус. Попробуйте позже.");
         }

@@ -8,7 +8,7 @@ package Bot.download;
  * {@link Bot.processing.JobStore}, {@link DownloadTokenRegistry},
  * {@link MessageSender}, {@link SupportedPlatforms}. Основные методы:
  * {@code createDownloadTask}, {@code handleDownloadComplete},
- * {@code handleDownloadError}, {@code getActiveDownloads}.</p>
+ * {@code handleDownloadError}.</p>
  *
  * <p><b>Ссылка выдаётся всегда.</b> Раньше файл до 50 МБ уходил вложением, и
  * ссылка формировалась только при сбое отправки — пользователь, нажавший
@@ -30,7 +30,6 @@ import org.springframework.stereotype.Service;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -82,10 +81,10 @@ public class DownloadService {
      * <p>Проверка платформы продублирована здесь намеренно: это последний рубеж
      * перед yt-dlp, куда произвольный URL попадать не должен (SSRF).</p>
      */
-    public void createDownloadTask(long chatId, String url, String name, MediaKind media) {
+    public void createDownloadTask(Owner owner, String url, MediaKind media) {
         if (!supportedPlatforms.isSupported(url)) {
-            log.warn("Отклонён неподдерживаемый URL на скачивание: chatId={}", chatId);
-            messageSender.sendMessage(chatId,
+            log.warn("Отклонён неподдерживаемый URL на скачивание: владелец={}", owner);
+            messageSender.sendMessage(owner.telegramChatId(),
                     "❌ Неподдерживаемая или некорректная ссылка.\n\n"
                             + supportedPlatforms.supportedListText());
             return;
@@ -93,11 +92,11 @@ public class DownloadService {
 
         // Внутренний ID отслеживания задачи (не путать с токеном ссылки на скачивание)
         String downloadId = UUID.randomUUID().toString();
-        ProcessingJob job = ProcessingJob.newDownload(Owner.telegram(chatId), url, downloadId, media);
+        ProcessingJob job = ProcessingJob.newDownload(owner, url, downloadId, media);
         jobStore.enqueue(job);
 
-        log.info("Задача загрузки создана: chatId={}, кто={}, jobId={}, downloadId={}, media={}",
-                chatId, name, job.shortId(), downloadId, media);
+        log.info("Задача загрузки создана: владелец={}, jobId={}, downloadId={}, media={}",
+                owner, job.shortId(), downloadId, media);
     }
 
     /**
@@ -142,13 +141,6 @@ public class DownloadService {
 
         messageSender.sendMessageWithKeyboard(info.chatId(),
                 "❌ Не удалось скачать файл.\n\n" + error, null, Keyboards.mainMenu());
-    }
-
-    /** Активные загрузки пользователя (для /status). */
-    public List<DownloadInfo> getActiveDownloads(long chatId) {
-        return jobStore.activeDownloads(Owner.telegram(chatId)).stream()
-                .map(DownloadService::toInfo)
-                .toList();
     }
 
     /**

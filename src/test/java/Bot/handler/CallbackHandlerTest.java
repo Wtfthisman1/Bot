@@ -3,8 +3,9 @@ package Bot.handler;
 import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
 import Bot.processing.MediaKind;
+import Bot.home.HomeApi;
+import Bot.owner.Owner;
 import Bot.telegram.Keyboards;
-import Bot.transcription.TranscriptDeliveryService;
 import Bot.transcription.TranscriptFormat;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,12 +30,12 @@ class CallbackHandlerTest {
 
     @Mock private UrlActionService urlActionService;
     @Mock private CommandHandler commandHandler;
-    @Mock private TranscriptDeliveryService transcriptDelivery;
+    @Mock private HomeApi home;
 
     private final UserSessionService sessions = new UserSessionService();
 
     private CallbackHandler handler() {
-        return new CallbackHandler(sessions, urlActionService, commandHandler, transcriptDelivery);
+        return new CallbackHandler(sessions, urlActionService, commandHandler, home);
     }
 
     @Test
@@ -138,7 +139,7 @@ class CallbackHandlerTest {
     void transcriptFormatButtonDeliversThatFormat() {
         handler().handle(CHAT, Keyboards.transcriptCallback(TranscriptFormat.SRT, "abc123"), "Аня");
 
-        verify(transcriptDelivery).sendFormat(CHAT, "abc123", TranscriptFormat.SRT);
+        verify(home).sendTranscript(Owner.telegram(CHAT), "abc123", TranscriptFormat.SRT);
         verifyNoInteractions(commandHandler);
     }
 
@@ -148,7 +149,7 @@ class CallbackHandlerTest {
         handler().handle(CHAT, "tr:srt:", "Аня");
 
         verify(commandHandler).showMenu(eq(CHAT), any());
-        verifyNoInteractions(transcriptDelivery);
+        verifyNoInteractions(home);
     }
 
     /** Неизвестный формат в кнопке не должен доходить до выдачи файлов. */
@@ -157,6 +158,6 @@ class CallbackHandlerTest {
         handler().handle(CHAT, "tr:pdf:abc123", "Аня");
 
         verify(commandHandler).showMenu(eq(CHAT), any());
-        verifyNoInteractions(transcriptDelivery);
+        verifyNoInteractions(home);
     }
 }
