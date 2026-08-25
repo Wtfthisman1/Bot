@@ -22,6 +22,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Полный стек: поднятый Spring Boot с настоящим Tomcat.
@@ -96,7 +99,13 @@ class DownloadEndpointIT {
 
         ArgumentCaptor<ProcessingJob> job = ArgumentCaptor.forClass(ProcessingJob.class);
         verify(jobStore).enqueue(job.capture());
-        return job.getValue().downloadId();
+        ProcessingJob enqueued = job.getValue();
+
+        // Сведения о загрузке сервис берёт из базы по downloadId; мок очереди
+        // должен отвечать так же, иначе проверялась бы не та механика
+        when(jobStore.findDownload(enqueued.downloadId())).thenReturn(Optional.of(
+                new JobStore.DownloadJob(enqueued.owner(), enqueued.url(), Instant.now())));
+        return enqueued.downloadId();
     }
 
     @Test

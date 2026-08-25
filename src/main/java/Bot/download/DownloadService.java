@@ -31,9 +31,7 @@ import org.springframework.stereotype.Service;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -59,9 +57,6 @@ public class DownloadService {
     private final MessageSender messageSender;
     private final DownloadTokenRegistry downloadTokenRegistry;
     private final SupportedPlatforms supportedPlatforms;
-
-    /** Отслеживание текущих загрузок. ConcurrentHashMap — доступ из разных потоков. */
-    private final Map<String, DownloadInfo> downloads = new ConcurrentHashMap<>();
 
     /**
      * Нормализует базовый URL один раз на старте.
@@ -98,13 +93,11 @@ public class DownloadService {
 
         // Внутренний ID отслеживания задачи (не путать с токеном ссылки на скачивание)
         String downloadId = UUID.randomUUID().toString();
-        downloads.put(downloadId, new DownloadInfo(chatId, url, name, System.currentTimeMillis()));
-
         ProcessingJob job = ProcessingJob.newDownload(Owner.telegram(chatId), url, downloadId, media);
         jobStore.enqueue(job);
 
-        log.info("Задача загрузки создана: chatId={}, jobId={}, downloadId={}, media={}, активных={}",
-                chatId, job.id(), downloadId, media, downloads.size());
+        log.info("Задача загрузки создана: chatId={}, кто={}, jobId={}, downloadId={}, media={}",
+                chatId, name, job.shortId(), downloadId, media);
     }
 
     /**
@@ -112,9 +105,8 @@ public class DownloadService {
      * помещается в лимит Bot API, дополнительно кладём его в чат.
      */
     public void handleDownloadComplete(String downloadId, Path filePath) {
-        DownloadInfo info = downloads.remove(downloadId);
+        DownloadInfo info = find(downloadId);
         if (info == null) {
-            log.warn("Не найдена информация о загрузке: {}", downloadId);
             return;
         }
 
@@ -143,9 +135,8 @@ public class DownloadService {
 
     /** Обрабатывает ошибку загрузки. */
     public void handleDownloadError(String downloadId, String error) {
-        DownloadInfo info = downloads.remove(downloadId);
+        DownloadInfo info = find(downloadId);
         if (info == null) {
-            log.warn("Не найдена информация о загрузке: {}", downloadId);
             return;
         }
 
@@ -155,9 +146,26 @@ public class DownloadService {
 
     /** Активные загрузки пользователя (для /status). */
     public List<DownloadInfo> getActiveDownloads(long chatId) {
-        return downloads.values().stream()
-                .filter(download -> download.chatId() == chatId)
+        return jobStore.activeDownloads(Owner.telegram(chatId)).stream()
+                .map(DownloadService::toInfo)
                 .toList();
+    }
+
+    /**
+     * Данные о загрузке из задачи. Пусто означает, что задачи с таким
+     * идентификатором в базе нет, — а это уже наша ошибка, не пользователя.
+     */
+    private DownloadInfo find(String downloadId) {
+        return jobStore.findDownload(downloadId)
+                .map(DownloadService::toInfo)
+                .orElseGet(() -> {
+                    log.warn("Не найдена задача загрузки: {}", downloadId);
+                    return null;
+                });
+    }
+
+    private static DownloadInfo toInfo(JobStore.DownloadJob job) {
+        return new DownloadInfo(job.owner().telegramChatId(), job.url(), job.startedAt().toEpochMilli());
     }
 
     /* ───────── helpers ───────── */
@@ -202,5 +210,5 @@ public class DownloadService {
     }
 
     /** Информация о загрузке. */
-    public record DownloadInfo(long chatId, String url, String userName, long startTime) {}
+    public record DownloadInfo(long chatId, String url, long startTime) {}
 }

@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,6 +29,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j
 public class JobStore {
+
+    /** Незавершённые состояния — то, что пользователь считает «в работе». */
+    private static final List<JobState> UNFINISHED = List.of(JobState.QUEUED, JobState.RUNNING);
 
     private final JobRepository repository;
 
@@ -116,6 +120,30 @@ public class JobStore {
         log.debug("Задача помечена сорвавшейся: jobId={}", id.toString().substring(0, 8));
     }
 
+    /**
+     * Сведения о задаче скачивания.
+     *
+     * <p>Раньше они лежали в карте внутри {@code DownloadService} и умирали
+     * вместе с процессом. После переезда очереди в базу это стало заметно:
+     * задача перезапуск переживала, а данные о ней — нет, и скачанный файл
+     * молча пропадал. Всё нужное и так есть в строке задачи.</p>
+     */
+    @Transactional(readOnly = true)
+    public Optional<DownloadJob> findDownload(String downloadId) {
+        return repository.findByDownloadId(downloadId).map(JobStore::toDownload);
+    }
+
+    /** Незавершённые загрузки владельца — для ответа на «Статус». */
+    @Transactional(readOnly = true)
+    public List<DownloadJob> activeDownloads(Owner owner) {
+        return repository
+                .findByOwnerTypeAndOwnerIdAndDownloadIdIsNotNullAndStateInOrderByCreatedAtDesc(
+                        owner.type(), owner.id(), UNFINISHED)
+                .stream()
+                .map(JobStore::toDownload)
+                .toList();
+    }
+
     /** Что у владельца сейчас в работе — ответ на кнопку «Статус». */
     @Transactional(readOnly = true)
     public OwnerLoad load(Owner owner) {
@@ -123,6 +151,9 @@ public class JobStore {
                 repository.countByOwnerTypeAndOwnerIdAndState(owner.type(), owner.id(), JobState.QUEUED),
                 repository.countByOwnerTypeAndOwnerIdAndState(owner.type(), owner.id(), JobState.RUNNING));
     }
+
+    /** Задача скачивания: кому, что и с какого момента. */
+    public record DownloadJob(Owner owner, String url, Instant startedAt) {}
 
     /** Задачи владельца: сколько ждёт очереди и сколько считается прямо сейчас. */
     public record OwnerLoad(long queued, long running) {
@@ -155,6 +186,10 @@ public class JobStore {
     private JobEntity require(UUID id) {
         return repository.findById(id)
                 .orElseThrow(() -> new IllegalStateException("Задача исчезла из базы: " + id));
+    }
+
+    private static DownloadJob toDownload(JobEntity e) {
+        return new DownloadJob(e.owner(), e.getUrl(), e.getCreatedAt());
     }
 
     private static ProcessingJob toJob(JobEntity e) {

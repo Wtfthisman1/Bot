@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,6 +34,13 @@ public interface JobRepository extends JpaRepository<JobEntity, UUID> {
              for update skip locked
             """, nativeQuery = true)
     Optional<UUID> lockNextQueued();
+
+    /** Задача чистого скачивания по её внутреннему идентификатору. */
+    Optional<JobEntity> findByDownloadId(String downloadId);
+
+    /** Незавершённые загрузки владельца — то, что показывает «Статус». */
+    List<JobEntity> findByOwnerTypeAndOwnerIdAndDownloadIdIsNotNullAndStateInOrderByCreatedAtDesc(
+            Owner.OwnerType ownerType, String ownerId, List<JobState> states);
 
     /** Сколько задач ждёт своей очереди — для логов и метрик. */
     long countByState(JobState state);

@@ -146,6 +146,35 @@ class JobStoreTest {
     }
 
     /**
+     * Сведения о загрузке раньше лежали в карте внутри сервиса и умирали вместе
+     * с процессом: после перезапуска скачанный файл молча пропадал, потому что
+     * задача восстанавливалась, а данные о ней — нет.
+     */
+    @Test
+    void downloadJobIsFoundByItsDownloadIdLaterOn() {
+        ProcessingJob job = store.enqueue(
+                ProcessingJob.newDownload(OWNER, URL, "загрузка-1", MediaKind.VIDEO));
+        store.claim();
+
+        assertThat(store.findDownload("загрузка-1"))
+                .map(JobStore.DownloadJob::url)
+                .contains(URL);
+        assertThat(store.findDownload("загрузка-1"))
+                .map(JobStore.DownloadJob::owner)
+                .contains(job.owner());
+    }
+
+    @Test
+    void finishedDownloadsDropOutOfTheActiveList() {
+        store.enqueue(ProcessingJob.newDownload(OWNER, URL, "загрузка-1", MediaKind.VIDEO));
+        store.enqueue(ProcessingJob.newDownload(OWNER, URL, "загрузка-2", MediaKind.AUDIO));
+        store.enqueue(ProcessingJob.newLink(OWNER, URL));           // не загрузка — не в счёт
+        store.complete(store.claim().orElseThrow().id(), Path.of("/tmp/видео.mp4"));
+
+        assertThat(store.activeDownloads(OWNER)).hasSize(1);
+    }
+
+    /**
      * Воркеров несколько, и они ходят за задачами одновременно. Одна задача
      * двоим достаться не должна — на этом держится вся очередь.
      */

@@ -1,6 +1,7 @@
 package Bot.download;
 
 import Bot.processing.JobStore;
+import Bot.processing.ProcessingJob;
 import Bot.service.SupportedPlatforms;
 import Bot.telegram.MessageSender;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,12 +19,16 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -51,6 +56,9 @@ class DownloadLinkFlowTest {
     private MockMvc mockMvc;
     private Path videoFile;
 
+    /** Задачи, ушедшие в очередь: подменяет собой строки таблицы jobs. */
+    private final List<ProcessingJob> enqueued = new ArrayList<>();
+
     @BeforeEach
     void setUp() throws IOException {
         videoFile = Files.writeString(tmp.resolve("Ролик & друзья.mp4"), "video-bytes");
@@ -59,6 +67,8 @@ class DownloadLinkFlowTest {
         ReflectionTestUtils.setField(registry, "ttlHours", 24);
         ReflectionTestUtils.setField(registry, "storePath", tmp.resolve("tokens.tsv").toString());
         ReflectionTestUtils.invokeMethod(registry, "load");
+
+        rememberEnqueuedJobs();
 
         downloadService = new DownloadService(jobStore, messageSender, registry, new SupportedPlatforms());
         ReflectionTestUtils.setField(downloadService, "downloadBaseUrl", BASE_URL + "/");
@@ -124,21 +134,36 @@ class DownloadLinkFlowTest {
 
     /* ───────── helpers ───────── */
 
+    /** downloadId наружу не торчит — берём его из задачи, ушедшей в очередь. */
     private String startDownload() {
         downloadService.createDownloadTask(CHAT, "https://youtu.be/dQw4w9WgXcQ", "Аня",
                 Bot.processing.MediaKind.VIDEO);
-        return downloadService.getActiveDownloads(CHAT).stream()
-                .findFirst()
-                .map(info -> downloadIdOf(info))
-                .orElseThrow();
+        return enqueued.get(enqueued.size() - 1).downloadId();
     }
 
-    /** downloadId наружу не торчит — достаём его из задачи, ушедшей в очередь. */
-    private String downloadIdOf(DownloadService.DownloadInfo info) {
-        ArgumentCaptor<Bot.processing.ProcessingJob> job =
-                ArgumentCaptor.forClass(Bot.processing.ProcessingJob.class);
-        verify(jobStore, org.mockito.Mockito.atLeastOnce()).enqueue(job.capture());
-        return job.getValue().downloadId();
+    /**
+     * Сведения о загрузке сервис берёт из базы по downloadId, поэтому мок
+     * очереди должен помнить поставленные задачи — иначе проверялась бы не
+     * та механика, что работает в бою.
+     */
+    private void rememberEnqueuedJobs() {
+        lenient().when(jobStore.enqueue(any())).thenAnswer(call -> {
+            ProcessingJob job = call.getArgument(0);
+            enqueued.add(job);
+            return job;
+        });
+        lenient().when(jobStore.findDownload(any())).thenAnswer(call -> enqueued.stream()
+                .filter(job -> call.getArgument(0).equals(job.downloadId()))
+                .findFirst()
+                .map(DownloadLinkFlowTest::asDownloadJob));
+        lenient().when(jobStore.activeDownloads(any())).thenAnswer(call -> enqueued.stream()
+                .filter(job -> job.downloadId() != null && job.owner().equals(call.getArgument(0)))
+                .map(DownloadLinkFlowTest::asDownloadJob)
+                .toList());
+    }
+
+    private static JobStore.DownloadJob asDownloadJob(ProcessingJob job) {
+        return new JobStore.DownloadJob(job.owner(), job.url(), Instant.now());
     }
 
     private String completeDownloadAndCaptureLink() {
