@@ -6,12 +6,14 @@ import Bot.telegram.TelegramBot;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Регистрирует Telegram-бота в API после того, как Spring полностью поднялся.
@@ -22,6 +24,13 @@ import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
  * и это нормальный режим, а не сбой. Отправка ошибок администратору при этом
  * настраивается всегда: она идёт через {@code MessageSender} и long polling
  * не требует.</p>
+ *
+ * <p>Регистрация делается ровно один раз, и это не перестраховка. Actuator
+ * слушает отдельный порт, то есть живёт в дочернем контексте, а его
+ * {@code ContextRefreshedEvent} доходит и до слушателей родителя — раньше
+ * событие ловилось именно оно, и бот регистрировался дважды. Два цикла
+ * {@code getUpdates} в одном процессе отбирают апдейты друг у друга: Telegram
+ * отвечает 409 Conflict, и сообщения теряются через раз.</p>
  */
 @Slf4j
 @Configuration      // или @Component
@@ -32,8 +41,16 @@ public class BotInitializer {
     private final MessageSender messageSender;
     private final BotConfig botConfig;
 
-    @EventListener(ContextRefreshedEvent.class)
+    /** Взведён после первой регистрации: второго события быть не должно. */
+    private final AtomicBoolean started = new AtomicBoolean();
+
+    @EventListener(ApplicationReadyEvent.class)
     public void init() {
+        if (!started.compareAndSet(false, true)) {
+            log.warn("Повторное событие готовности — регистрация уже сделана, пропускаю");
+            return;
+        }
+
         long adminChatId = parseAdminChatId(botConfig.getAdminChatId());
         TelegramLogAppender.init(messageSender, adminChatId);
         if (adminChatId == 0L) {

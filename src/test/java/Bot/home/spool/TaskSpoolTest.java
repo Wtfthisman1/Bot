@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -55,6 +56,21 @@ class TaskSpoolTest {
 
         assertThat(spool.pending()).extracting(SpooledTask::url)
                 .containsExactly("первая", "вторая", "третья");
+    }
+
+    /**
+     * Порядок не должен зависеть от разрешения системных часов: пачка задач,
+     * созданная быстрее, чем тикают миллисекунды, всё равно уходит по очереди.
+     */
+    @Test
+    void burstOfTasksKeepsItsOrder() {
+        for (int i = 0; i < 50; i++) {
+            spool.add(SpooledTask.transcribeLink(OWNER, "url-" + i));
+        }
+
+        assertThat(spool.pending()).extracting(SpooledTask::url)
+                .containsExactlyElementsOf(
+                        IntStream.range(0, 50).mapToObj(i -> "url-" + i).toList());
     }
 
     @Test

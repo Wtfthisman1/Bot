@@ -12,9 +12,10 @@ package Bot.home.spool;
  * одной файловой системы атомарен, поэтому оборванная на середине запись не
  * оставит после себя полузадачу, которую потом никто не разберёт.</p>
  *
- * <p>Порядок задаётся именем файла — {@code <момент>-<id>.json}. Времени
- * создания в самой записи для этого мало: файловая система порядка не хранит,
- * а читать все записи ради сортировки на каждом обходе незачем.</p>
+ * <p>Порядок задаётся моментом создания из самой записи, а не именем файла:
+ * имя огрублено до миллисекунд, и две задачи, попавшие в одну, встали бы в
+ * произвольном порядке — по случайному {@code UUID}. Момент внутри процесса
+ * строго возрастает, см. {@link SpooledTask}.</p>
  */
 import Bot.config.Profiles;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -91,8 +92,9 @@ public class TaskSpool {
         try (Stream<Path> files = Files.list(directory)) {
             List<SpooledTask> tasks = new ArrayList<>();
             files.filter(path -> path.getFileName().toString().endsWith(".json"))
-                    .sorted(Comparator.comparing(path -> path.getFileName().toString()))
                     .forEach(path -> read(path).ifPresent(tasks::add));
+            tasks.sort(Comparator.comparing(SpooledTask::createdAt)
+                    .thenComparing(SpooledTask::id));
             return tasks;
         } catch (IOException e) {
             log.error("Не удалось прочитать спул: {}", directory, e);
