@@ -19,6 +19,7 @@ import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
 import Bot.telegram.TelegramFileDownloader;
 import Bot.transcription.TranscribeExecutor;
+import Bot.transcription.TranscriptDeliveryService;
 import Bot.upload.UploadService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +50,7 @@ public class MessageHandler {
 
     private final TaskExecutor taskExecutor;
     private final TranscribeExecutor transcriber;
+    private final TranscriptDeliveryService transcriptDelivery;
     private final TelegramFileDownloader fileDownloader;
     private final MessageSender messageSender;
     private final UploadService uploadService;
@@ -159,7 +161,7 @@ public class MessageHandler {
             try {
                 Path media = download.get();
                 Path transcript = transcriber.run(chatId, media);
-                messageSender.sendTranscript(chatId, transcript);
+                transcriptDelivery.deliver(chatId, transcript);
             } catch (FileTooLargeException e) {
                 log.info("Файл превысил лимит Bot API: chatId={}", chatId);
                 sendUploadFormOffer(chatId, fileSize);

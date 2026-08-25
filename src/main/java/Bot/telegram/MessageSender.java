@@ -81,14 +81,18 @@ public class MessageSender {
     /**
      * Отправляет транскрипцию как документ
      */
-    public void sendTranscript(long chatId, Path txt) {
+    public void sendTranscript(long chatId, Path txt, InlineKeyboardMarkup keyboard) {
         taskExecutor.execute(() -> {
             try {
-                getTelegramBot().execute(SendDocument.builder()
+                SendDocument document = SendDocument.builder()
                         .chatId(String.valueOf(chatId))
                         .caption("✅ Ваша транскрипция")
                         .document(new InputFile(txt.toFile()))
-                        .build());
+                        .build();
+                // Клавиатура необязательна: у старых расшифровок соседних
+                // форматов нет, и предлагать их нечем
+                if (keyboard != null) document.setReplyMarkup(keyboard);
+                getTelegramBot().execute(document);
             } catch (TelegramApiException e) {
                 log.error("Ошибка отправки файла", e);
             }

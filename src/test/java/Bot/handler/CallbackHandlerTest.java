@@ -4,6 +4,8 @@ import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
 import Bot.processing.MediaKind;
 import Bot.telegram.Keyboards;
+import Bot.transcription.TranscriptDeliveryService;
+import Bot.transcription.TranscriptFormat;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -27,11 +29,12 @@ class CallbackHandlerTest {
 
     @Mock private UrlActionService urlActionService;
     @Mock private CommandHandler commandHandler;
+    @Mock private TranscriptDeliveryService transcriptDelivery;
 
     private final UserSessionService sessions = new UserSessionService();
 
     private CallbackHandler handler() {
-        return new CallbackHandler(sessions, urlActionService, commandHandler);
+        return new CallbackHandler(sessions, urlActionService, commandHandler, transcriptDelivery);
     }
 
     @Test
@@ -128,5 +131,32 @@ class CallbackHandlerTest {
 
         verify(commandHandler).showMenu(eq(CHAT), any());
         verifyNoInteractions(urlActionService);
+    }
+
+    /** Кнопка формата под расшифровкой ведёт в выдачу, а не в меню. */
+    @Test
+    void transcriptFormatButtonDeliversThatFormat() {
+        handler().handle(CHAT, Keyboards.transcriptCallback(TranscriptFormat.SRT, "abc123"), "Аня");
+
+        verify(transcriptDelivery).sendFormat(CHAT, "abc123", TranscriptFormat.SRT);
+        verifyNoInteractions(commandHandler);
+    }
+
+    /** Битый callback — не повод молчать: показываем меню. */
+    @Test
+    void brokenTranscriptCallbackShowsMenu() {
+        handler().handle(CHAT, "tr:srt:", "Аня");
+
+        verify(commandHandler).showMenu(eq(CHAT), any());
+        verifyNoInteractions(transcriptDelivery);
+    }
+
+    /** Неизвестный формат в кнопке не должен доходить до выдачи файлов. */
+    @Test
+    void unknownFormatCodeShowsMenu() {
+        handler().handle(CHAT, "tr:pdf:abc123", "Аня");
+
+        verify(commandHandler).showMenu(eq(CHAT), any());
+        verifyNoInteractions(transcriptDelivery);
     }
 }

@@ -16,6 +16,8 @@ import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
 import Bot.processing.MediaKind;
 import Bot.telegram.Keyboards;
+import Bot.transcription.TranscriptDeliveryService;
+import Bot.transcription.TranscriptFormat;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,10 +32,18 @@ public class CallbackHandler {
     private final UserSessionService sessionService;
     private final UrlActionService urlActionService;
     private final CommandHandler commandHandler;
+    private final TranscriptDeliveryService transcriptDelivery;
 
     public void handle(long chatId, String callbackData, String userName) {
         if (callbackData == null || callbackData.isBlank()) {
             log.warn("Пустой callback: chatId={}", chatId);
+            return;
+        }
+
+        // Единственные кнопки с данными в callback — форматы расшифровки:
+        // их код не постоянная, поэтому switch по константам их не поймает
+        if (callbackData.startsWith(Keyboards.CB_TRANSCRIPT_PREFIX)) {
+            handleTranscriptFormat(chatId, callbackData);
             return;
         }
 
@@ -60,6 +70,29 @@ public class CallbackHandler {
                 commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
             }
         }
+    }
+
+    /**
+     * Разбирает {@code tr:<формат>:<id>} и отдаёт расшифровку в этом формате.
+     *
+     * <p>Битую строку не считаем ошибкой пользователя: он мог нажать кнопку из
+     * очень старого сообщения. Показываем меню, как и на любой другой
+     * устаревший callback.</p>
+     */
+    private void handleTranscriptFormat(long chatId, String callbackData) {
+        String[] parts = callbackData.split(":", 3);
+        Optional<TranscriptFormat> format = parts.length == 3
+                ? TranscriptFormat.fromCode(parts[1])
+                : Optional.empty();
+
+        if (format.isEmpty() || parts[2].isBlank()) {
+            log.warn("Не разобрал callback формата расшифровки: chatId={}, data='{}'", chatId, callbackData);
+            commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
+            return;
+        }
+
+        log.info("Запрошен формат расшифровки: chatId={}, формат={}", chatId, format.get());
+        transcriptDelivery.sendFormat(chatId, parts[2], format.get());
     }
 
     /**

@@ -6,6 +6,7 @@ import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
 import Bot.telegram.TelegramBot;
 import Bot.transcription.TranscribeExecutor;
+import Bot.transcription.TranscriptDeliveryService;
 import Bot.download.DownloadService;
 import Bot.service.StatusService;
 import jakarta.annotation.PostConstruct;
@@ -32,7 +33,8 @@ public class JobWorker {
      * <p>Ответственность: несколько потоков параллельно извлекают задачи,
      * выполняют этапы скачивания и транскрипции, отправляют результаты и метят
      * статусы. Связан с {@link JobQueue}, {@link DownloaderExecutor},
-     * {@link TranscribeExecutor}, {@link MessageSender}, {@link DownloadService},
+     * {@link TranscribeExecutor}, {@link TranscriptDeliveryService},
+     * {@link MessageSender}, {@link DownloadService},
      * {@link StatusService}. Ключевые методы: {@code workLoop}, {@code download},
      * {@code transcribe}.</p>
      *
@@ -48,6 +50,7 @@ public class JobWorker {
     private final JobQueue queue;
     private final DownloaderExecutor downloader;
     private final TranscribeExecutor transcriber;
+    private final TranscriptDeliveryService transcriptDelivery;
     private final MessageSender messageSender;
     private final DownloadService downloadService;
     private final StatusService statusService;
@@ -154,7 +157,7 @@ public class JobWorker {
         try {
             Path txt = transcriber.run(job.chatId(), job.filePath());
             log.info("Транскрипция готова {}", txt);
-            messageSender.sendTranscript(job.chatId(), txt);
+            transcriptDelivery.deliver(job.chatId(), txt);
         } catch (Exception e) {
             log.error("Ошибка транскрипции для файла: {}", job.filePath(), e);
             messageSender.sendMessageWithKeyboard(job.chatId(),

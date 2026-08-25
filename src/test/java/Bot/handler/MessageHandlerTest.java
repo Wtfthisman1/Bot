@@ -6,6 +6,7 @@ import Bot.processing.MediaKind;
 import Bot.telegram.MessageSender;
 import Bot.telegram.TelegramFileDownloader;
 import Bot.transcription.TranscribeExecutor;
+import Bot.transcription.TranscriptDeliveryService;
 import Bot.upload.UploadService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,7 @@ class MessageHandlerTest {
     private static final String URL = "https://youtu.be/dQw4w9WgXcQ";
 
     @Mock private TranscribeExecutor transcriber;
+    @Mock private TranscriptDeliveryService transcriptDelivery;
     @Mock private TelegramFileDownloader fileDownloader;
     @Mock private MessageSender messageSender;
     @Mock private UploadService uploadService;
@@ -46,8 +48,9 @@ class MessageHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new MessageHandler(new SyncTaskExecutor(), transcriber, fileDownloader,
-                messageSender, uploadService, sessions, urlActionService, commandHandler);
+        handler = new MessageHandler(new SyncTaskExecutor(), transcriber, transcriptDelivery,
+                fileDownloader, messageSender, uploadService, sessions, urlActionService,
+                commandHandler);
     }
 
     @Test

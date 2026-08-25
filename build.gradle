@@ -35,6 +35,9 @@ dependencies {
 	implementation 'org.telegram:telegrambots:6.9.7.1'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'me.paulschwarz:spring-dotenv:4.0.0'
+	// Экспорт транскрипта в .docx. Тянет xmlbeans и заметно утяжеляет jar, но
+	// формат Word руками не собрать: дальше сюда лягут спикеры и таймкоды.
+	implementation 'org.apache.poi:poi-ooxml:5.5.1'
 
 	compileOnly         'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'

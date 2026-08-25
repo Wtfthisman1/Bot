@@ -1,0 +1,56 @@
+# Автозапуск бота на домашней машине.
+#
+# Ставится скриптом deploy/home/setup-service.sh — он подставляет сюда
+# фактические пути. Значения ниже — те, что были на момент написания.
+#
+# Ключевое: бот не переживал перезагрузку, потому что запускался руками из
+# терминала. Здесь же он поднимается при старте машины и перезапускается,
+# если упал.
+
+[Unit]
+Description=Transcribot — Telegram-бот расшифровки (Whisper + yt-dlp)
+# Туннель нужен не для запуска, а для ссылок наружу: без сети бот стартует,
+# но ссылки не откроются, поэтому ждём именно поднятую сеть
+After=network-online.target wg-quick@wg0.service
+Wants=network-online.target
+# Три падения подряд за минуту — это не «не повезло», а сломанная конфигурация:
+# бесконечный цикл перезапусков только засорит журнал. Ключи живут в [Unit]:
+# в [Service] systemd их игнорирует.
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=dmitry
+Group=dmitry
+WorkingDirectory=/home/dmitry/IdeaProjects/Bot
+
+# .env читается из рабочего каталога самим приложением
+# (DotenvEnvironmentPostProcessor), поэтому EnvironmentFile здесь не нужен —
+# иначе токен пришлось бы держать в двух местах.
+ExecStart=/usr/bin/java -jar /home/dmitry/IdeaProjects/Bot/build/libs/bot.jar
+
+# yt-dlp лежит в /usr/local/bin, а deno — в домашнем каталоге; урезанный PATH
+# systemd их не видит. Каталог deno приложение добавляет само
+# (downloader.js-runtime-dir), здесь — остальное.
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HOME=/home/dmitry
+
+Restart=always
+RestartSec=10
+
+# Логи бот пишет сам в logs/app.log; в журнал уходит только то, что не поймал
+# logback (например, ошибка старта JVM)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=transcribot
+
+# Мягкая остановка. Очередь пока живёт в памяти, поэтому незавершённые задачи
+# при перезапуске теряются — пользователю придётся прислать запись заново.
+# Это чинится в фазе 1 (очередь в Postgres), а ждать часами при выключении
+# машины всё равно нельзя.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
