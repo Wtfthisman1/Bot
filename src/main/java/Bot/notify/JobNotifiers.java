@@ -8,9 +8,11 @@ package Bot.notify;
  * должна быть видна в логе: пользователь иначе просто не дождётся расшифровки,
  * не получив ни файла, ни объяснения.</p>
  */
+import Bot.config.Profiles;
 import Bot.owner.Owner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
@@ -18,6 +20,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+@Profile(Profiles.HOME)
 @Service
 @RequiredArgsConstructor
 @Slf4j

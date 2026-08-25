@@ -15,12 +15,14 @@ package Bot.transcription;
  * расшифровки, сделанные до появления субтитров, соседних файлов не имеют, и
  * обещать их кнопкой значило бы врать.</p>
  */
+import Bot.config.Profiles;
 import Bot.owner.Owner;
 import Bot.processing.JobStore;
 import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Files;
@@ -30,6 +32,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+@Profile(Profiles.HOME)
 @Service
 @RequiredArgsConstructor
 @Slf4j

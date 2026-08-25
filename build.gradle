@@ -18,7 +18,7 @@ bootJar {
 	// Явно включаем статические ресурсы
 	from('src/main/resources') {
 		include 'static/**'
-		include 'application.properties'
+		include 'application*.properties'
 		include 'logback.xml'
 		include 'pythonScript/**'
 	}

@@ -13,9 +13,11 @@ package Bot.processing;
  * не могут, и никто никого не ждёт. Связан с {@link JobRepository};
  * используется {@link JobWorker} и всеми, кто ставит задачи.</p>
  */
+import Bot.config.Profiles;
 import Bot.owner.Owner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +27,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+@Profile(Profiles.HOME)
 @Service
 @RequiredArgsConstructor
 @Slf4j

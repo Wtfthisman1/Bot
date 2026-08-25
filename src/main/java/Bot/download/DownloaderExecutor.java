@@ -7,11 +7,13 @@ package Bot.download;
  * анализирует выход yt-dlp и формирует понятные ошибки. Связан с
  * {@link StorageManager}. Основной метод: {@code download}.</p>
  */
+import Bot.config.Profiles;
 import Bot.processing.MediaKind;
 import Bot.service.StorageManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import java.io.BufferedReader;
 import java.io.File;
@@ -28,6 +30,7 @@ import java.util.Objects;
 import org.slf4j.MDC;
 import java.util.concurrent.TimeUnit;
 
+@Profile(Profiles.HOME)
 @Service
 @Slf4j
 @RequiredArgsConstructor

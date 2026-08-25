@@ -5,14 +5,15 @@ package Bot.telegram;
  *
  * <p>Ответственность: получение filePath через Bot API, формирование URL и
  * сохранение контента в пользовательское хранилище. Связан с {@link StorageManager}
- * и использует {@link TelegramBot} из контекста. Основные методы: {@code downloadVoice},
+ * и {@link TelegramApi}. Основные методы: {@code downloadVoice},
  * {@code downloadAudio}, {@code downloadVideo}, {@code downloadDocument}.</p>
  */
+import Bot.config.Profiles;
 import Bot.service.StorageManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.objects.File;
@@ -25,6 +26,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
+@Profile(Profiles.HOME)
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -37,17 +39,10 @@ public class TelegramFileDownloader {
     public static final long TELEGRAM_FILE_LIMIT_BYTES = 20L * 1024 * 1024;
 
     private final StorageManager storageManager;
-    private final ApplicationContext applicationContext; // Используем ApplicationContext
-    
+    private final TelegramApi telegram;
+
     @Value("${bot.key}")
     private String botToken;
-
-    /**
-     * Получает TelegramBot из контекста
-     */
-    private TelegramBot getTelegramBot() {
-        return applicationContext.getBean(TelegramBot.class);
-    }
 
     /**
      * Скачивает файл из Telegram по fileId
@@ -155,7 +150,7 @@ public class TelegramFileDownloader {
      * Выполняет запрос к Telegram API
      */
     private File execute(GetFile getFile) throws TelegramApiException {
-        return getTelegramBot().execute(getFile);
+        return telegram.execute(getFile);
     }
 
     /**

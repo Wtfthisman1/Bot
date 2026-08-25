@@ -4,13 +4,13 @@ package Bot.telegram;
  * Асинхронная отправка сообщений и файлов в Telegram.
  *
  * <p>Ответственность: текстовые сообщения (с/без parse mode), документы,
- * инлайн-клавиатуры и chat action. Связан с {@link TelegramBot} через
- * ApplicationContext. Основные методы: {@code sendMessage},
+ * инлайн-клавиатуры и chat action. Отправляет через {@link TelegramApi},
+ * поэтому работает и там, где long polling не поднят, — на домашней машине
+ * после разделения. Основные методы: {@code sendMessage},
  * {@code sendMessageWithKeyboard}, {@code sendTranscript}, {@code sendChatAction}.</p>
  */
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationContext;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendChatAction;
@@ -33,14 +33,7 @@ public class MessageSender {
     private static final int CHUNK_LIMIT = 4000;
 
     private final TaskExecutor taskExecutor;
-    private final ApplicationContext applicationContext; // Используем ApplicationContext
-
-    /**
-     * Получает TelegramBot из контекста
-     */
-    private TelegramBot getTelegramBot() {
-        return applicationContext.getBean(TelegramBot.class);
-    }
+    private final TelegramApi telegram;
 
     /**
      * Отправляет текстовое сообщение
@@ -58,7 +51,6 @@ public class MessageSender {
         List<String> parts = splitMessage(text);
 
         taskExecutor.execute(() -> {
-            TelegramBot bot = getTelegramBot();
             for (String part : parts) {
                 SendMessage msg = SendMessage.builder()
                         .chatId(String.valueOf(chatId))
@@ -70,7 +62,7 @@ public class MessageSender {
                     if (log.isDebugEnabled()) {
                         log.debug("OUT ▶ {}", part.replace("\n", "\\n"));
                     }
-                    bot.execute(msg);
+                    telegram.execute(msg);
                 } catch (TelegramApiException e) {
                     log.error("Ошибка sendMessage", e);
                 }
@@ -92,7 +84,7 @@ public class MessageSender {
                 // Клавиатура необязательна: у старых расшифровок соседних
                 // форматов нет, и предлагать их нечем
                 if (keyboard != null) document.setReplyMarkup(keyboard);
-                getTelegramBot().execute(document);
+                telegram.execute(document);
             } catch (TelegramApiException e) {
                 log.error("Ошибка отправки файла", e);
             }
@@ -110,7 +102,7 @@ public class MessageSender {
         taskExecutor.execute(() -> {
             try {
                 sendChatActionSync(chatId, "upload_document");
-                getTelegramBot().execute(SendDocument.builder()
+                telegram.execute(SendDocument.builder()
                         .chatId(String.valueOf(chatId))
                         .caption(caption)
                         .document(new InputFile(file.toFile()))
@@ -126,7 +118,7 @@ public class MessageSender {
     /** Синхронный chat action — вызывается уже внутри асинхронной задачи. */
     private void sendChatActionSync(long chatId, String action) {
         try {
-            getTelegramBot().execute(SendChatAction.builder()
+            telegram.execute(SendChatAction.builder()
                     .chatId(String.valueOf(chatId))
                     .action(action)
                     .build());
@@ -144,7 +136,6 @@ public class MessageSender {
         List<String> parts = splitMessage(text);
 
         taskExecutor.execute(() -> {
-            TelegramBot bot = getTelegramBot();
             for (int i = 0; i < parts.size(); i++) {
                 SendMessage msg = SendMessage.builder()
                         .chatId(String.valueOf(chatId))
@@ -157,7 +148,7 @@ public class MessageSender {
                     if (log.isDebugEnabled()) {
                         log.debug("OUT ▶ {}", parts.get(i).replace("\n", "\\n"));
                     }
-                    bot.execute(msg);
+                    telegram.execute(msg);
                 } catch (TelegramApiException e) {
                     log.error("Ошибка sendMessageWithKeyboard", e);
                 }
@@ -171,7 +162,7 @@ public class MessageSender {
     public void sendChatAction(long chatId, String action) {
         taskExecutor.execute(() -> {
             try {
-                getTelegramBot().execute(SendChatAction.builder()
+                telegram.execute(SendChatAction.builder()
                         .chatId(String.valueOf(chatId))
                         .action(action)
                         .build());

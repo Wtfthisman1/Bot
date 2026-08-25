@@ -8,11 +8,13 @@ package Bot.transcription;
  * ошибок. Связан со {@link StorageManager}. Основной метод: {@code run} —
  * возвращает путь к .txt с транскриптом.</p>
  */
+import Bot.config.Profiles;
 import Bot.processing.GpuLock;
 import Bot.service.StorageManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -31,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.MDC;
 
+@Profile(Profiles.HOME)
 @Service
 @RequiredArgsConstructor
 @Slf4j

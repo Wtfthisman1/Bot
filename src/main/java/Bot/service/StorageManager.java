@@ -9,8 +9,10 @@ package Bot.service;
  * {@code downloadedPath}, {@code transcriptPath}, {@code getTranscriptsDir}.</p>
  */
 import jakarta.annotation.PostConstruct;
+import Bot.config.Profiles;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
@@ -22,6 +24,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 
+@Profile(Profiles.HOME)
 @Component
 @Slf4j
 public class StorageManager {

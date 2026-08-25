@@ -1,7 +1,9 @@
 package Bot.processing;
 
+import Bot.config.Profiles;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.Semaphore;
@@ -25,6 +27,7 @@ import java.util.concurrent.Semaphore;
  * <p>Семафор честный (FIFO): без этого задача могла бы бесконечно уступать
  * очередь другим и не дождаться своего хода.</p>
  */
+@Profile(Profiles.HOME)
 @Component
 @Slf4j
 public class GpuLock {

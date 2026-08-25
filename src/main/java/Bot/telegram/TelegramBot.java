@@ -5,16 +5,22 @@ package Bot.telegram;
  *
  * <p>Ответственность: регистрирует команды, принимает апдейты и делегирует их
  * {@link MessageHandler}, {@link CommandHandler} и {@link CallbackHandler}.
- * Зависит от {@link Bot.config.BotConfig}.
+ * Зависит от {@link Bot.config.BotConfig}. Поднимается только в профиле
+ * {@code bot}: getUpdates Telegram отдаёт одному процессу, поэтому приём живёт
+ * там, где стоит бот, а отправка — в {@link TelegramApi}, доступном всем.</p>
+ *
  * Ключевые методы: {@code init} (регистрация команд), {@code onUpdateReceived}.</p>
  */
 import Bot.config.BotConfig;
+import Bot.config.Profiles;
 import Bot.handler.CallbackHandler;
+import Bot.home.HomeUnavailableException;
 import Bot.handler.CommandHandler;
 import Bot.handler.MessageHandler;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
@@ -29,6 +35,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.List;
 
+@Profile(Profiles.BOT)
 @Component
 @Slf4j
 public class TelegramBot extends TelegramLongPollingBot {
@@ -53,16 +60,19 @@ public class TelegramBot extends TelegramLongPollingBot {
     private final MessageHandler messageHandler;
     private final CommandHandler commandHandler;
     private final CallbackHandler callbackHandler;
+    private final MessageSender messageSender;
 
     public TelegramBot(BotConfig cfg,
                        MessageHandler messageHandler,
                        CommandHandler commandHandler,
-                       CallbackHandler callbackHandler) {
+                       CallbackHandler callbackHandler,
+                       MessageSender messageSender) {
         super(cfg.getBotToken());
         this.config = cfg;
         this.messageHandler = messageHandler;
         this.commandHandler = commandHandler;
         this.callbackHandler = callbackHandler;
+        this.messageSender = messageSender;
     }
 
     /* ───────────────── init ───────────────── */
@@ -100,6 +110,8 @@ public class TelegramBot extends TelegramLongPollingBot {
         MDC.put(MDC_CHAT_ID, String.valueOf(chatId));
         try {
             routeMessage(u.getMessage(), chatId, name);
+        } catch (HomeUnavailableException e) {
+            homeAsleep(chatId, e);
         } catch (Exception e) {
             // Иначе исключение уходит в библиотеку long-polling и теряется
             log.error("Необработанная ошибка при разборе апдейта: updateId={}", u.getUpdateId(), e);
@@ -154,11 +166,27 @@ public class TelegramBot extends TelegramLongPollingBot {
             // в проде и «кнопка не работает» невозможно отличить от «апдейт не дошёл»
             log.info("Callback получен: chatId={}, data='{}'", chatId, cq.getData());
             callbackHandler.handle(chatId, cq.getData(), firstName(cq.getFrom()));
+        } catch (HomeUnavailableException e) {
+            homeAsleep(chatId, e);
         } catch (Exception e) {
             log.error("Необработанная ошибка при разборе callback: chatId={}", chatId, e);
         } finally {
             MDC.remove(MDC_CHAT_ID);
         }
+    }
+
+    /**
+     * Дом не отвечает — единственное место, где это превращается в ответ.
+     *
+     * <p>Ловится здесь, а не в каждом обработчике: любое действие пользователя
+     * упирается в дом, и разбросанные по экранам одинаковые try/catch только
+     * прятали бы причину. Ниже по стеку остаётся лишь то, что работает в
+     * фоне и до этого catch не доходит.</p>
+     */
+    private void homeAsleep(long chatId, HomeUnavailableException e) {
+        log.warn("Домашняя машина не отвечает: chatId={}, причина={}", chatId, e.getMessage());
+        messageSender.sendMessageWithKeyboard(chatId, HomeUnavailableException.USER_MESSAGE,
+                null, Keyboards.mainMenu());
     }
 
     private void answerCallback(CallbackQuery cq) {

@@ -7,16 +7,19 @@ package Bot.notify;
  * расшифровку с кнопками форматов или объяснить, почему не вышло. Связан с
  * {@link TranscriptDeliveryService} и {@link MessageSender}.</p>
  */
+import Bot.config.Profiles;
 import Bot.owner.Owner;
 import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
 import Bot.transcription.TranscriptDeliveryService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
 import java.util.UUID;
 
+@Profile(Profiles.HOME)
 @Component
 @RequiredArgsConstructor
 public class TelegramJobNotifier implements JobNotifier {

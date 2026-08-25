@@ -17,6 +17,7 @@ package Bot.processing;
  * <p>Размер пула — {@code worker.pool-size} (по умолчанию 2). Одну и ту же
  * задачу двое взять не могут: строка блокируется в базе.</p>
  */
+import Bot.config.Profiles;
 import Bot.download.DownloadService;
 import Bot.download.DownloaderExecutor;
 import Bot.notify.JobNotifiers;
@@ -28,6 +29,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
@@ -36,6 +38,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+@Profile(Profiles.HOME)
 @Component
 @RequiredArgsConstructor
 @Slf4j

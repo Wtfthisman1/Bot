@@ -16,6 +16,7 @@ package Bot.handler;
 import Bot.handler.UserSessionService.Pending;
 import Bot.home.HomeApi;
 import Bot.home.HomeApi.TelegramFile;
+import Bot.home.HomeUnavailableException;
 import Bot.telegram.FileTooLargeException;
 import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
@@ -167,6 +168,11 @@ public class MessageHandler {
             } catch (FileTooLargeException e) {
                 log.info("Файл превысил лимит Bot API: chatId={}", chatId);
                 sendUploadFormOffer(chatId, fileSize);
+            } catch (HomeUnavailableException e) {
+                // Фоновая задача до общего catch в TelegramBot не доходит
+                log.warn("Домашняя машина не отвечает: chatId={}", chatId);
+                messageSender.sendMessageWithKeyboard(chatId, HomeUnavailableException.USER_MESSAGE,
+                        null, Keyboards.mainMenu());
             } catch (Exception e) {
                 log.error("Ошибка обработки медиа: chatId={}", chatId, e);
                 messageSender.sendMessageWithKeyboard(chatId, transcribeErrorMessage(e),

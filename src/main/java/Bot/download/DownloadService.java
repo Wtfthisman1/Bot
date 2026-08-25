@@ -15,6 +15,7 @@ package Bot.download;
  * «Скачать», ссылки не получал вовсе. Теперь сообщение со ссылкой отправляется
  * в любом случае, а вложение — дополнительно, когда влезает в лимит Bot API.</p>
  */
+import Bot.config.Profiles;
 import Bot.service.SupportedPlatforms;
 import Bot.owner.Owner;
 import Bot.processing.JobStore;
@@ -26,12 +27,14 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
+@Profile(Profiles.HOME)
 @Service
 @RequiredArgsConstructor
 @Slf4j

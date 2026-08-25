@@ -12,11 +12,13 @@ package Bot.account;
  * почтового сервиса, а свой почтовик на VPS уходит в спам. Регистрация
  * работает сразу, подтверждение добавится, когда будет выбран сервис.</p>
  */
+import Bot.config.Profiles;
 import Bot.owner.Owner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +27,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
+@Profile(Profiles.HOME)
 @Service
 @RequiredArgsConstructor
 @Slf4j

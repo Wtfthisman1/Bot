@@ -1,5 +1,6 @@
 package Bot.upload;
 
+import Bot.config.Profiles;
 import Bot.owner.Owner;
 import Bot.processing.JobStore;
 import Bot.processing.ProcessingJob;
@@ -11,6 +12,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,6 +30,7 @@ import java.nio.file.Path;
  * файлов и 5 ссылок. Валидирует одноразовый токен, сохраняет файлы и ставит
  * задачи в {@link JobStore}. URL формы: <b>/upload/{token}</b>.</p>
  */
+@Profile(Profiles.HOME)
 @RestController
 @RequestMapping("/upload")
 @RequiredArgsConstructor

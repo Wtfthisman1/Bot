@@ -14,6 +14,7 @@ package Bot.home;
  * здесь местами разворачивается обратно в chatId. Переклад под владельца
  * целиком делается вместе с сайтом: раньше — осиротеет всё уже скачанное.</p>
  */
+import Bot.config.Profiles;
 import Bot.download.DownloadService;
 import Bot.owner.Owner;
 import Bot.processing.JobStore;
@@ -25,11 +26,13 @@ import Bot.transcription.TranscriptFormat;
 import Bot.upload.UploadService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
 import java.util.List;
 
+@Profile(Profiles.HOME)
 @Service
 @RequiredArgsConstructor
 @Slf4j

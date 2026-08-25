@@ -15,11 +15,13 @@ package Bot.download;
  * главное — файл рядом с видео не увидит вторая машина, когда бот и воркер
  * разъедутся.</p>
  */
+import Bot.config.Profiles;
 import Bot.owner.Owner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +33,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Optional;
 
+@Profile(Profiles.HOME)
 @Component
 @RequiredArgsConstructor
 @Slf4j

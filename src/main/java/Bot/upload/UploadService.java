@@ -8,10 +8,12 @@ package Bot.upload;
  * безопасной ссылки на форму. Основные методы: {@code generate}, {@code consume}.
  * Фоновая задача: {@code purgeExpired}.</p>
  */
+import Bot.config.Profiles;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -21,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.security.SecureRandom;
 import org.springframework.beans.factory.InitializingBean;
 
+@Profile(Profiles.HOME)
 @Service
 @RequiredArgsConstructor
 @Slf4j

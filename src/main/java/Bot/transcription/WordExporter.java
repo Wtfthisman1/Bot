@@ -12,11 +12,13 @@ package Bot.transcription;
  * транскрипции: большинству нужен обычный текст, а Word спрашивают редко.
  * Готовый файл переиспользуется, пока не устарел относительно {@code .txt}.</p>
  */
+import Bot.config.Profiles;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.xwpf.usermodel.ParagraphAlignment;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -28,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
+@Profile(Profiles.HOME)
 @Service
 @Slf4j
 public class WordExporter {

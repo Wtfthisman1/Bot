@@ -1,5 +1,6 @@
 package Bot.download;
 
+import Bot.config.Profiles;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
@@ -7,6 +8,7 @@ import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +27,7 @@ import java.util.Optional;
  * Прямое скачивание по имени файла и поиск по всему хранилищу убраны как источник
  * IDOR. URL: <b>/download/{token}</b>.</p>
  */
+@Profile(Profiles.HOME)
 @RestController
 @RequestMapping("/download")
 @RequiredArgsConstructor

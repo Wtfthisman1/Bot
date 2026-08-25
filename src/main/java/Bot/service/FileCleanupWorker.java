@@ -8,10 +8,12 @@ package Bot.service;
  * {@code cleanupOldFiles} (cron), вспомогательные — очистка по пользователю
  * и директории, расчёт статистики.</p>
  */
+import Bot.config.Profiles;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -22,6 +24,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.stream.Stream;
 
+@Profile(Profiles.HOME)
 @Component
 @RequiredArgsConstructor
 @Slf4j
