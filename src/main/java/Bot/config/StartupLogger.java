@@ -5,9 +5,15 @@ package Bot.config;
  *
  * <p>Ответственность: один раз, по готовности контекста, вывести в лог реальные
  * значения, от которых зависят выдаваемые пользователю ссылки — порт сервера и
- * базовые URL. Отдельно предупреждает о рассогласовании: если в
- * {@code UPLOAD_BASE_URL}/{@code DOWNLOAD_BASE_URL} не указан порт, а приложение
- * слушает не 80-й, все выданные ссылки будут вести в никуда.</p>
+ * базовые URL. Отдельно предупреждает о рассогласовании: если base-url
+ * указывает на эту же машину, но на другой порт, все выданные ссылки ведут
+ * в никуда.</p>
+ *
+ * <p>Внешний адрес с другим портом рассогласованием не считается: бот стоит за
+ * обратным прокси, который слушает 443 и ходит сюда на 8080 — это штатная
+ * схема, а не ошибка. Раньше предупреждение здесь срабатывало при каждом
+ * старте, и от него научились отмахиваться — ровно то, ради чего WARN
+ * и заводят, переставало работать.</p>
  */
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,11 +23,15 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class StartupLogger {
+
+    /** Хосты, за которыми не может стоять прокси: это и есть текущая машина. */
+    private static final Set<String> LOCAL_HOSTS = Set.of("localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]");
 
     @Value("${server.port:8080}")
     private int serverPort;
@@ -40,36 +50,69 @@ public class StartupLogger {
         log.info("Приложение готово: порт={}, воркеров={}", serverPort, poolSize);
         log.info("Базовые URL: upload={}, download={}", uploadBaseUrl, downloadBaseUrl);
 
-        warnIfPortMismatch("upload.base-url", uploadBaseUrl);
-        warnIfPortMismatch("download.base-url", downloadBaseUrl);
+        report("upload.base-url", uploadBaseUrl);
+        report("download.base-url", downloadBaseUrl);
+    }
+
+    /** Что не так с базовым адресом — решение отделено от логирования ради тестов. */
+    enum Verdict {
+        /** Адрес не задан: ссылки будут строиться от localhost. */
+        MISSING,
+        /** Строку не удалось разобрать как URL. */
+        INVALID,
+        /** Указывает на эту же машину, но на порт, где никто не слушает. */
+        LOCAL_PORT_MISMATCH,
+        /** Внешний адрес: порт может отличаться, впереди обратный прокси. */
+        BEHIND_PROXY,
+        /** Адрес совпадает с тем, что слушает приложение. */
+        DIRECT
     }
 
     /**
      * Ссылки строятся из base-url, а не из порта сервера, поэтому расхождение
-     * тихо ломает выдачу: пользователь получает ссылку на порт, где никто не слушает.
+     * тихо ломает выдачу: пользователь получает ссылку на порт, где никто
+     * не слушает. Проверяем именно этот случай — локальный адрес с чужим портом.
      */
-    private void warnIfPortMismatch(String property, String baseUrl) {
+    Verdict check(String baseUrl) {
         if (baseUrl == null || baseUrl.isBlank()) {
-            log.warn("{} не задан — ссылки будут строиться от localhost и не откроются извне", property);
-            return;
+            return Verdict.MISSING;
         }
 
-        int urlPort;
+        URI uri;
         try {
-            URI uri = URI.create(baseUrl);
-            urlPort = uri.getPort() != -1
-                    ? uri.getPort()
-                    : ("https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80);
+            uri = URI.create(baseUrl.trim());
         } catch (IllegalArgumentException e) {
-            log.error("{} содержит некорректный URL: {}", property, baseUrl, e);
-            return;
+            return Verdict.INVALID;
         }
 
-        if (urlPort != serverPort) {
-            log.warn("{}={} указывает на порт {}, а приложение слушает {}. "
-                            + "Ссылки откроются, только если перед ботом стоит обратный прокси; "
-                            + "иначе добавьте :{} в {}.",
-                    property, baseUrl, urlPort, serverPort, serverPort, property);
+        String host = uri.getHost();
+        if (host == null) {
+            return Verdict.INVALID;
+        }
+
+        int urlPort = uri.getPort() != -1
+                ? uri.getPort()
+                : ("https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80);
+
+        if (urlPort == serverPort) {
+            return Verdict.DIRECT;
+        }
+        return LOCAL_HOSTS.contains(host.toLowerCase()) ? Verdict.LOCAL_PORT_MISMATCH : Verdict.BEHIND_PROXY;
+    }
+
+    private void report(String property, String baseUrl) {
+        switch (check(baseUrl)) {
+            case MISSING -> log.warn(
+                    "{} не задан — ссылки будут строиться от localhost и не откроются извне", property);
+            case INVALID -> log.error("{} содержит некорректный URL: {}", property, baseUrl);
+            case LOCAL_PORT_MISMATCH -> log.warn(
+                    "{}={} указывает на эту же машину, но не на порт {}. Ссылки не откроются — "
+                            + "добавьте :{} в {}.",
+                    property, baseUrl, serverPort, serverPort, property);
+            case BEHIND_PROXY -> log.info(
+                    "{}={} — внешний адрес, ссылки идут через обратный прокси на порт {}",
+                    property, baseUrl, serverPort);
+            case DIRECT -> log.debug("{}={} совпадает с портом приложения", property, baseUrl);
         }
     }
 }
