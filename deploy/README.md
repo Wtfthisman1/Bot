@@ -139,6 +139,22 @@ ssh root@VPS_IP "BOT_TOKEN=<токен> ADMIN_CHAT_ID=<id> HOME_API_KEY=<клю�
 echo 'systemctl restart transcribot-bot' | ~/.vps-transcribot/rsh.py
 ```
 
+**3.5. Промежуточная проверка.** Перед переключением стоит убедиться, что путь
+до дома вообще работает, — на этом шаге бот ещё отвечает как обычно:
+
+```bash
+# дом уже с новым jar и ключом в .env
+sudo systemctl restart transcribot
+
+# с VPS: без ключа 403, с ключом — сводка задач
+echo 'curl -s -o /dev/null -w "%{http_code}\n" \
+  "http://10.8.0.2:8080/internal/home/status?ownerType=TELEGRAM&ownerId=1"' \
+  | ~/.vps-transcribot/rsh.py
+```
+
+403 здесь — правильный ответ: фильтр на месте. Если приходит 000 или таймаут,
+дело в туннеле или в том, что дом не слушает 8080, — переключаться рано.
+
 **4. Дом перестаёт принимать апдейты.** Раскомментируйте в
 `deploy/home/transcribot.service` строку `Environment=SPRING_PROFILES_ACTIVE=home`
 и примените:
