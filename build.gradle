@@ -45,10 +45,13 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.flywaydb:flyway-core'
 	implementation 'org.flywaydb:flyway-database-postgresql'
-	// Только хеширование паролей: полный Spring Security придёт вместе с
-	// сайтом. Ставить его сейчас значило бы закрыть /download и /upload,
-	// которыми бот пользуется прямо сегодня.
-	implementation 'org.springframework.security:spring-security-crypto'
+	// Сайт: сессии, вход по паролю и вход через Google. Стартер закрывает всё
+	// подряд по умолчанию, поэтому /download, /upload и /internal открыты
+	// явными правилами в SiteSecurityConfig — ими бот пользуется прямо сегодня.
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+	// Разметка вида sec:authorize в шаблонах
+	implementation 'org.thymeleaf.extras:thymeleaf-extras-springsecurity6'
 	runtimeOnly    'org.postgresql:postgresql'
 	// telegrambots тянет за собой jackson-module-jaxb-annotations (через
 	// Jersey), а тот написан под javax.xml.bind, которого в Spring Boot 3 нет.
@@ -67,6 +70,8 @@ dependencies {
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	// Вход в сессию и csrf-токен в тестах страниц
+	testImplementation 'org.springframework.security:spring-security-test'
 	// Тесты ходят в настоящий Postgres в контейнере: очередь опирается на
 	// FOR UPDATE SKIP LOCKED, которого нет у встраиваемых баз — H2 показал бы
 	// зелёные тесты и сломался на проде

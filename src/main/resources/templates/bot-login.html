@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<!--
+  Своя голова документа, а не общий фрагмент: только этой странице нужен
+  meta refresh, которым она сама себя опрашивает, пока человек подтверждает
+  вход в Telegram. Обновление страницей, а не скриптом, — чтобы вход работал
+  и с выключенным JavaScript.
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="3">
+    <title>Вход через бота — Транскрибот</title>
+    <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header(null)}"></header>
+
+<main class="page narrow">
+    <h1>Подтвердите вход в Telegram</h1>
+
+    <p class="lead">Откройте бота и нажмите «Это я, войти». Как только
+        подтвердите — эта страница сама откроет кабинет.</p>
+
+    <p>
+        <a class="button" th:href="${botLink}" target="_blank" rel="noopener">
+            Открыть Telegram
+        </a>
+    </p>
+
+    <!--
+      Запасной путь нужен не для красоты: если чат с ботом уже открыт, часть
+      клиентов Telegram не пересылает нагрузку ссылки, и человек видит одно
+      приветствие. Команда руками делает ровно то же самое.
+    -->
+    <p class="hint">Если бот ответил только приветствием, отправьте ему это
+        сообщение — оно то же самое, что и ссылка:</p>
+    <p><code class="code" th:text="'/start login_' + ${code}">/start login_КОД</code></p>
+
+    <p class="hint">Ссылка действует пять минут. Номер телефона не нужен.</p>
+    <p class="hint"><a href="/login">Вернуться к другим способам входа</a></p>
+</main>
+
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{fragments :: head('Вход')}"></head>
+<body>
+<header th:replace="~{fragments :: header(null)}"></header>
+
+<main class="page narrow">
+    <h1>Вход</h1>
+
+    <p th:if="${error}" class="error" th:text="${error}">ошибка</p>
+
+    <form method="post" th:action="@{/login}" class="card">
+        <label>Почта
+            <input type="email" name="email" required autofocus autocomplete="email">
+        </label>
+        <label>Пароль
+            <input type="password" name="password" required autocomplete="current-password">
+        </label>
+        <button type="submit" class="button">Войти</button>
+    </form>
+
+    <p class="or">или</p>
+    <div th:replace="~{fragments :: providers(${botName}, ${googleEnabled})}"></div>
+
+    <p class="hint">Нет аккаунта? <a href="/register">Зарегистрируйтесь</a>.</p>
+</main>
+
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

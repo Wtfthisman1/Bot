@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<!--
+  Общие куски страниц: голова документа, шапка и подвал.
+
+  Держатся в одном файле, чтобы у сайта была одна шапка, а не четыре похожие.
+  Разметка сознательно простая: свой JS здесь только у виджета Telegram, всё
+  остальное — обычные формы, которые работают и без скриптов.
+-->
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+
+<head th:fragment="head(title)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title} + ' — Транскрибот'">Транскрибот</title>
+    <link rel="stylesheet" href="/css/site.css">
+</head>
+
+<body>
+
+<header th:fragment="header(account)" class="top">
+    <a class="brand" href="/">🎧 Транскрибот</a>
+    <nav>
+        <span th:if="${account != null}" class="who" th:text="${account.title()}">кто</span>
+        <form th:if="${account != null}" method="post" th:action="@{/logout}" class="inline">
+            <button type="submit" class="link">Выйти</button>
+        </form>
+        <a th:if="${account == null}" href="/login">Войти</a>
+    </nav>
+</header>
+
+<!--
+  Подвал — только навигация по обязательным страницам сайта. Как устроена
+  обработка внутри, здесь не рассказывается: это касается человека ровно в тот
+  момент, когда он ставит задачу, и написано в кабинете рядом с кнопкой.
+-->
+<footer th:fragment="footer" class="bottom">
+    <nav>
+        <a href="/help">Помощь</a>
+        <a href="/privacy">Конфиденциальность</a>
+        <a href="/terms">Условия</a>
+    </nav>
+    <p>Транскрибот — расшифровка аудио и видео. transcribot.site</p>
+</footer>
+
+<!--
+  Кнопки входа: одинаковые на странице входа и на странице регистрации.
+  Google появляется только тогда, когда заданы ключи приложения.
+
+  Способов через Telegram два, и они не дублируют друг друга: виджет требует
+  номер телефона, а вход через бота — нет, но требует переключиться в чат.
+-->
+<div th:fragment="providers(botName, googleEnabled)" class="providers">
+    <script th:if="${botName != null and !botName.isEmpty()}"
+            async src="https://telegram.org/js/telegram-widget.js?22"
+            th:attr="data-telegram-login=${botName},
+                     data-auth-url=@{/auth/telegram}"
+            data-size="large"
+            data-request-access="write"></script>
+
+    <form th:if="${botName != null and !botName.isEmpty()}"
+          method="post" th:action="@{/auth/bot}">
+        <button type="submit" class="button ghost">Войти через бота, без номера</button>
+    </form>
+
+    <a th:if="${googleEnabled}" class="google" href="/oauth2/authorization/google">
+        Войти через Google
+    </a>
+</div>
+
+</body>
+</html>

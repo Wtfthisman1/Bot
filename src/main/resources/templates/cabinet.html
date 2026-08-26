@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{fragments :: head('Мои задачи')}"></head>
+<body>
+<header th:replace="~{fragments :: header(${account})}"></header>
+
+<main class="page">
+
+    <p th:if="${message}" class="ok" th:text="${message}">готово</p>
+    <p th:if="${error}" class="error" th:text="${error}">ошибка</p>
+
+    <section class="quota">
+        <h1>Мои задачи</h1>
+        <p class="counter" th:text="'Расшифровки: ' + ${quota.describe()}">квота</p>
+    </section>
+
+    <section class="new">
+        <h2>Новая задача</h2>
+
+        <form method="post" th:action="@{/cabinet/tasks}" class="card">
+            <label>Ссылка на видео или аудио
+                <input type="url" name="url" required placeholder="https://…">
+            </label>
+            <fieldset>
+                <legend>Что сделать</legend>
+                <label class="radio">
+                    <input type="radio" name="action" value="transcribe" checked>
+                    Расшифровать в текст
+                </label>
+                <label class="radio">
+                    <input type="radio" name="action" value="download">
+                    Просто скачать файл
+                </label>
+            </fieldset>
+            <label>Если скачать — то что
+                <select name="media">
+                    <option value="VIDEO">Видео</option>
+                    <option value="AUDIO">Только звук</option>
+                </select>
+            </label>
+            <button type="submit" class="button">Поставить в очередь</button>
+            <small th:text="${supported}">поддерживаемые площадки</small>
+        </form>
+
+        <form method="post" th:action="@{/cabinet/upload}" enctype="multipart/form-data" class="card">
+            <label>Или пришлите файл
+                <input type="file" name="file" required
+                       accept="audio/*,video/*,.mp3,.m4a,.wav,.ogg,.mp4,.mkv,.mov">
+            </label>
+            <button type="submit" class="button">Загрузить и расшифровать</button>
+        </form>
+
+        <!--
+          Про домашнюю машину сказано здесь, а не в подвале: это ответ на вопрос
+          «почему ничего не происходит», и он нужен там, где задачу ставят.
+        -->
+        <p class="hint">Задачи считаются на домашней машине с видеокартой. Если она
+            спит, задача всё равно принимается и запустится, когда машина проснётся, —
+            результат придёт в историю ниже.</p>
+    </section>
+
+    <!--
+      Блок нужен не всем: вошедшему через Telegram привязывать нечего, у него
+      чат и аккаунт — одно целое. Остальным объясняем, что это даёт, и уводим
+      в бота ссылкой с кодом внутри: набирать команду руками не нужно.
+    -->
+    <section class="telegram">
+        <h2>Бот в Telegram</h2>
+
+        <div th:if="${telegramLinked}">
+            <p>Подключён. Записи можно присылать прямо в чат — расшифровка придёт
+                туда же, а задача появится в истории ниже. Лимит у сайта и бота общий.</p>
+            <p>
+                <a class="button ghost" th:href="'https://t.me/' + ${botName}"
+                   target="_blank" rel="noopener">Открыть бота</a>
+            </p>
+        </div>
+
+        <div th:unless="${telegramLinked}">
+            <p>Записи можно присылать прямо в Telegram, не открывая сайт: бот вернёт
+                расшифровку в чат, а задача появится в истории здесь. Для этого нужно
+                один раз показать боту, что чат ваш.</p>
+
+            <form th:unless="${linkCode}" method="post" th:action="@{/cabinet/link-code}">
+                <button type="submit" class="button">Подключить Telegram</button>
+            </form>
+
+            <div th:if="${linkCode}">
+                <p>Осталось подтвердить в Telegram — откроется чат с ботом, нажмите
+                    в нём «Да, это мой аккаунт»:</p>
+                <p>
+                    <a class="button" target="_blank" rel="noopener"
+                       th:href="'https://t.me/' + ${botName} + '?start=link_' + ${linkCode}">
+                        Подтвердить в Telegram
+                    </a>
+                </p>
+                <p class="hint">Если ссылка не открылась, отправьте боту сообщение
+                    <code th:text="'/link ' + ${linkCode}">/link КОД</code> — это то же самое.
+                    Код действует 15 минут.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="history">
+        <h2>История</h2>
+
+        <p th:if="${#lists.isEmpty(jobs)}" class="empty">
+            Пока пусто. Поставьте первую задачу — она появится здесь.
+        </p>
+
+        <table th:unless="${#lists.isEmpty(jobs)}">
+            <thead>
+            <tr>
+                <th>Когда</th>
+                <th>Что</th>
+                <th>Состояние</th>
+                <th>Результат</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="job : ${jobs}">
+                <td class="when" th:text="${job.when()}">дата</td>
+                <td class="what">
+                    <span class="title" th:text="${job.title()}">ссылка</span>
+                    <span class="tag" th:text="${job.kind()}">вид</span>
+                    <span th:if="${job.fromTelegram()}" class="tag tg">из Telegram</span>
+                </td>
+                <td>
+                    <span th:classappend="${job.failed()} ? 'bad' : ''" th:text="${job.state()}">состояние</span>
+                    <small th:if="${job.error()}" class="why" th:text="${job.error()}">причина</small>
+                </td>
+                <td class="files">
+                    <a th:each="format : ${job.formats()}"
+                       th:href="@{/cabinet/files/{id}/{format}(id=${job.id()}, format=${format})}"
+                       th:switch="${format}" class="chip">
+                        <span th:case="'txt'">Текст</span>
+                        <span th:case="'srt'">SRT</span>
+                        <span th:case="'vtt'">VTT</span>
+                        <span th:case="'doc'">Word</span>
+                        <span th:case="*" th:text="${format}">формат</span>
+                    </a>
+                    <a th:if="${job.mediaName()}"
+                       th:href="@{/cabinet/files/{id}/media(id=${job.id()})}" class="chip">Файл</a>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+</main>
+
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>
