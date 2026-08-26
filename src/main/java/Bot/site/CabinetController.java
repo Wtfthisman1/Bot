@@ -24,7 +24,10 @@ import Bot.processing.MediaKind;
 import Bot.processing.ProcessingJob;
 import Bot.service.StorageManager;
 import Bot.service.SupportedPlatforms;
+import Bot.transcription.Transcript;
 import Bot.transcription.TranscriptFormat;
+import Bot.transcription.TranscriptRenderer;
+import Bot.transcription.TranscriptSegments;
 import Bot.transcription.WordExporter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +54,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Optional;
 
 @Profile(Profiles.HOME)
@@ -72,6 +76,9 @@ public class CabinetController {
     private final StorageManager storage;
     private final SupportedPlatforms supportedPlatforms;
     private final WordExporter wordExporter;
+    private final TranscriptSegments transcripts;
+    private final TranscriptRenderer renderer;
+    private final Bot.transcription.TranscriptSearch transcriptSearch;
 
     @GetMapping
     public String cabinet(@AuthenticationPrincipal AccountPrincipal principal, Model model) {
@@ -172,6 +179,24 @@ public class CabinetController {
                 .body(new FileSystemResource(file));
     }
 
+    /**
+     * Поиск по своим расшифровкам.
+     *
+     * <p>Ищется место в записи, а не запись: попадание ведёт на страницу
+     * расшифровки и сразу перематывает плеер к нужной секунде.</p>
+     */
+    @GetMapping("/search")
+    public String search(@AuthenticationPrincipal AccountPrincipal principal,
+                         @RequestParam(required = false) String q, Model model) {
+        Map<java.util.UUID, String> titles = history.titlesOf(principal.accountId());
+
+        model.addAttribute("account", principal);
+        model.addAttribute("q", q);
+        model.addAttribute("titles", titles);
+        model.addAttribute("hits", transcriptSearch.find(titles.keySet(), q));
+        return "search";
+    }
+
     /** Код привязки: его человек присылает боту, чтобы чат стал этим аккаунтом. */
     @PostMapping("/link-code")
     public String linkCode(@AuthenticationPrincipal AccountPrincipal principal,
@@ -191,14 +216,62 @@ public class CabinetController {
             return null;
         }
 
-        Path txt = Path.of(job.getTranscriptPath());
         Optional<TranscriptFormat> requested = TranscriptFormat.fromCode(format);
         if (requested.isEmpty()) {
             return null;
         }
+
+        // Правки человека живут в базе, а файлы Whisper написаны один раз и о
+        // них не знают: пока сегменты есть, файл собирается заново из них.
+        // Иначе исправленное в редакторе не попадало бы в скачанное — а именно
+        // за этим редактор и заводили
+        Transcript transcript = transcripts.of(job.getId());
+        if (!transcript.isEmpty()) {
+            return rendered(job, transcript, requested.get());
+        }
+
+        Path txt = Path.of(job.getTranscriptPath());
         return requested.get() == TranscriptFormat.DOCX
                 ? wordExporter.export(txt)
                 : requested.get().fileFor(txt);
+    }
+
+    /**
+     * Собирает файл из сегментов во временном каталоге.
+     *
+     * <p>Не рядом с исходной расшифровкой: та осталась такой, какой её выдал
+     * Whisper, и переписывать её правками — значит потерять оригинал. Имя файлу
+     * даётся прежнее, потому что его увидит человек в загрузках.</p>
+     */
+    private Path rendered(JobEntity job, Transcript transcript, TranscriptFormat format)
+            throws IOException {
+        String stem = stemOf(Path.of(job.getTranscriptPath()));
+        Path dir = Files.createTempDirectory("transcript-");
+        dir.toFile().deleteOnExit();
+
+        Path txt = dir.resolve(stem + TranscriptFormat.TXT.extension());
+        Files.writeString(txt, renderer.asText(transcript));
+        txt.toFile().deleteOnExit();
+
+        if (format == TranscriptFormat.TXT) {
+            return txt;
+        }
+        if (format == TranscriptFormat.DOCX) {
+            Path docx = wordExporter.export(txt);
+            docx.toFile().deleteOnExit();
+            return docx;
+        }
+
+        Path out = dir.resolve(stem + format.extension());
+        Files.writeString(out, renderer.render(transcript, format));
+        out.toFile().deleteOnExit();
+        return out;
+    }
+
+    private static String stemOf(Path file) {
+        String name = file.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        return dot > 0 ? name.substring(0, dot) : name;
     }
 
     private Optional<java.util.UUID> parseId(String value) {

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{fragments :: head('Расшифровка')}"></head>
+<body>
+<header th:replace="~{fragments :: header(${account})}"></header>
+
+<main class="page">
+
+    <p th:if="${message}" class="ok" th:text="${message}">готово</p>
+
+    <h1>Расшифровка</h1>
+    <p class="lead source" th:text="${title}">источник</p>
+
+    <!--
+      Запись и текст рядом: чтобы поправить ошибку распознавания, надо услышать,
+      что там было на самом деле. preload=metadata — файл может весить гигабайт,
+      и качать его целиком ради длительности незачем.
+    -->
+    <video th:if="${hasMedia}" id="player" controls preload="metadata"
+           th:src="@{/cabinet/transcript/{id}/media(id=${jobId})}"></video>
+    <p th:unless="${hasMedia}" class="hint">Запись уже удалена — файлы хранятся
+        две недели. Текст остался, его можно править и искать.</p>
+
+    <p th:if="${#lists.isEmpty(lines)}" class="empty">
+        У этой задачи нет разметки по времени: она расшифрована до того, как
+        появился редактор. Текст целиком лежит в файле — <a th:href="@{/cabinet}">вернуться в кабинет</a>.
+    </p>
+
+    <form th:unless="${#lists.isEmpty(lines)}" method="post"
+          th:action="@{/cabinet/transcript/{id}(id=${jobId})}">
+
+        <section th:if="${not #lists.isEmpty(speakers)}" class="speakers card">
+            <h2>Голоса</h2>
+            <p class="hint">Диаризация различила голоса, но не знает имён.
+                Назовите их — имена подставятся во всю расшифровку и в субтитры.</p>
+            <div th:each="speaker : ${speakers}" class="speaker">
+                <input type="hidden" name="speakerLabel" th:value="${speaker.label()}">
+                <label>
+                    <span th:text="${speaker.label()}">SPEAKER_00</span>
+                    <input type="text" name="speakerName" th:value="${speaker.name()}"
+                           maxlength="60" placeholder="Ведущий">
+                </label>
+            </div>
+        </section>
+
+        <section class="lines">
+            <div th:each="line : ${lines}" class="line" th:classappend="${line.edited()} ? 'edited' : ''">
+                <p th:if="${line.speaker()}" class="who" th:text="${line.speaker()}">Спикер 1</p>
+                <div class="row">
+                    <!--
+                      Время — кнопка, а не ссылка: она перематывает уже открытую
+                      запись, а не ведёт на другую страницу. Без JavaScript она
+                      просто ничего не делает, и текст всё равно правится.
+                    -->
+                    <button type="button" class="at" th:text="${line.at()}"
+                            th:data-seconds="${line.seconds()}">0:00</button>
+                    <input type="hidden" name="segmentId" th:value="${line.id()}">
+                    <textarea name="text" rows="2" th:text="${line.text()}">текст</textarea>
+                </div>
+            </div>
+        </section>
+
+        <div class="cta">
+            <button type="submit" class="button">Сохранить правки</button>
+            <a class="button ghost" th:href="@{/cabinet}">В кабинет</a>
+        </div>
+    </form>
+
+    <section th:unless="${#lists.isEmpty(lines)}" class="exports">
+        <h2>Скачать</h2>
+        <p class="hint">Файлы собираются из того, что вы видите выше: с правками
+            и с именами голосов.</p>
+        <p>
+            <a class="chip" th:href="@{/cabinet/files/{id}/txt(id=${jobId})}">Текст</a>
+            <a class="chip" th:href="@{/cabinet/files/{id}/srt(id=${jobId})}">SRT</a>
+            <a class="chip" th:href="@{/cabinet/files/{id}/vtt(id=${jobId})}">VTT</a>
+            <a class="chip" th:href="@{/cabinet/files/{id}/doc(id=${jobId})}">Word</a>
+        </p>
+    </section>
+
+</main>
+
+<footer th:replace="~{fragments :: footer}"></footer>
+<script src="/js/transcript.js" defer></script>
+</body>
+</html>

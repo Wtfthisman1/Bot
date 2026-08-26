@@ -180,3 +180,85 @@ td { padding: 12px 10px; border-top: 1px solid var(--line); vertical-align: top;
     padding: 10px 18px;
     color: var(--text);
 }
+
+/* ── расшифровка: плеер и реплики ── */
+
+.source { word-break: break-all; font-size: 15px; }
+
+#player {
+    width: 100%;
+    max-height: 380px;
+    background: #000;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    /* Липкий плеер: реплик бывают сотни, и, прокрутив список, человек
+       не должен искать перемотку в начале страницы */
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.speakers .speaker { margin: 8px 0; }
+.speakers label { flex-direction: row; align-items: center; gap: 10px; }
+.speakers label span { color: var(--dim); font-family: ui-monospace, monospace; font-size: 13px; }
+
+.lines { margin: 20px 0; }
+.line { padding: 4px 0; }
+.line .who { color: var(--accent); margin: 16px 0 4px; font-size: 14px; }
+.line .row { display: flex; gap: 10px; align-items: flex-start; }
+.line textarea {
+    flex: 1;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font: inherit;
+    resize: vertical;
+}
+.line textarea:focus { border-color: var(--line); outline: none; }
+/* Реплика, которая звучит сейчас, и реплика, которую уже правили руками */
+.line.now textarea { border-color: var(--accent); }
+.line.edited textarea { border-left: 2px solid var(--ok); }
+
+.at {
+    flex: none;
+    width: 62px;
+    padding: 6px 0;
+    background: transparent;
+    color: var(--dim);
+    border: none;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+}
+.at:hover { color: var(--accent); }
+
+.chip.open { border-color: var(--accent); color: var(--accent); }
+
+/* ── поиск ── */
+
+.search input[type=search], .inline-search input[type=search] {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font: inherit;
+}
+.inline-search { display: flex; gap: 10px; margin: 0 0 16px; }
+.inline-search input[type=search] { flex: 1; }
+
+.hit {
+    display: flex;
+    gap: 12px;
+    padding: 12px 10px;
+    border-top: 1px solid var(--line);
+    color: var(--text);
+}
+.hit:hover { background: var(--panel); text-decoration: none; }
+.hit .what { display: block; }
+.hit .title { display: block; color: var(--dim); font-size: 13px; word-break: break-all; }
+.hit .quote { display: block; margin-top: 4px; }
+.hit .mark { color: var(--accent); font-weight: 600; }

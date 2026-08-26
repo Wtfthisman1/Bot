@@ -26,7 +26,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Profile(Profiles.HOME)
@@ -38,6 +42,7 @@ public class TranscriptSegments {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final TranscriptSegmentRepository segments;
+    private final TranscriptSpeakerRepository speakers;
 
     /**
      * Разбирает разметку Whisper и кладёт её в базу.
@@ -74,10 +79,84 @@ public class TranscriptSegments {
         return parsed.size();
     }
 
-    /** Расшифровка задачи по порядку; пусто — значит, разметки нет. */
+    /** Расшифровка задачи целиком: сегменты по порядку и имена голосов. */
     @Transactional(readOnly = true)
-    public List<TranscriptSegmentEntity> of(UUID jobId) {
-        return segments.findByJobIdOrderByOrd(jobId);
+    public Transcript of(UUID jobId) {
+        return Transcript.of(segments.findByJobIdOrderByOrd(jobId), speakers.findByJobId(jobId));
+    }
+
+    /**
+     * Сохраняет правки текста.
+     *
+     * <p>Списки приходят из формы двумя параллельными наборами — так браузер
+     * отдаёт повторяющиеся поля, и порядок он сохраняет. Чужие сегменты сюда
+     * попасть не могут: каждый проверяется на принадлежность задаче, а саму
+     * задачу вызывающая сторона уже сверила с аккаунтом.</p>
+     *
+     * <p>Пустой текст не сохраняется: убрать сегмент совсем — это не правка, а
+     * дыра во времени, после которой субтитры разъезжаются.</p>
+     *
+     * @return сколько сегментов действительно изменилось
+     */
+    @Transactional
+    public int saveEdits(UUID jobId, List<Long> ids, List<String> texts) {
+        if (ids == null || texts == null || ids.size() != texts.size()) {
+            return 0;
+        }
+
+        Map<Long, TranscriptSegmentEntity> mine = new HashMap<>();
+        segments.findByJobIdOrderByOrd(jobId).forEach(s -> mine.put(s.getId(), s));
+
+        int changed = 0;
+        for (int i = 0; i < ids.size(); i++) {
+            TranscriptSegmentEntity segment = mine.get(ids.get(i));
+            String text = texts.get(i) == null ? "" : texts.get(i).strip();
+            if (segment == null || text.isEmpty() || text.equals(segment.getText())) {
+                continue;
+            }
+            segment.setText(text);
+            segment.setEdited(true);
+            changed++;
+        }
+
+        if (changed > 0) {
+            log.info("Правки расшифровки сохранены: сегментов={} (jobId={})", changed, jobId);
+        }
+        return changed;
+    }
+
+    /**
+     * Переименовывает голоса: {@code SPEAKER_00} → «Ведущий».
+     *
+     * <p>Пустое имя означает «верни как было»: строка удаляется, и голос снова
+     * называется «Спикер N».</p>
+     */
+    @Transactional
+    public void renameSpeakers(UUID jobId, Map<String, String> names) {
+        if (names == null || names.isEmpty()) {
+            return;
+        }
+
+        // Чужую метку в форму подставить можно, но записать её нельзя: имя без
+        // единого сегмента с такой меткой не покажется нигде
+        Set<String> known = new HashSet<>();
+        segments.findByJobIdOrderByOrd(jobId).forEach(s -> {
+            if (s.getSpeaker() != null) {
+                known.add(s.getSpeaker());
+            }
+        });
+
+        names.forEach((label, name) -> {
+            if (!known.contains(label)) {
+                return;
+            }
+            String trimmed = name == null ? "" : name.strip();
+            if (trimmed.isEmpty()) {
+                speakers.deleteById(new TranscriptSpeakerEntity.Key(jobId, label));
+            } else {
+                speakers.save(new TranscriptSpeakerEntity(jobId, label, trimmed));
+            }
+        });
     }
 
     /* ───────── разбор ───────── */

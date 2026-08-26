@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{fragments :: head('Поиск по расшифровкам')}"></head>
+<body>
+<header th:replace="~{fragments :: header(${account})}"></header>
+
+<main class="page">
+    <h1>Поиск по расшифровкам</h1>
+
+    <form method="get" th:action="@{/cabinet/search}" class="card search">
+        <label>Что искать
+            <input type="search" name="q" th:value="${q}" autofocus
+                   placeholder="гиппокамп">
+        </label>
+        <button type="submit" class="button">Найти</button>
+        <small>Кавычки ищут точную фразу, минус исключает слово,
+            <code>or</code> — любое из двух.</small>
+    </form>
+
+    <p th:if="${q != null and #lists.isEmpty(hits)}" class="empty">
+        Ничего не нашлось. Ищется только по расшифровкам, сделанным после
+        появления редактора, — у старых нет разметки по времени.
+    </p>
+
+    <section th:unless="${#lists.isEmpty(hits)}" class="hits">
+        <p class="counter" th:text="'Найдено реплик: ' + ${#lists.size(hits)}">сколько</p>
+
+        <!--
+          Попадание — ссылка со временем в адресе: страница расшифровки читает
+          его и сразу перематывает запись, а не оставляет искать глазами
+        -->
+        <a th:each="hit : ${hits}" class="hit"
+           th:href="@{/cabinet/transcript/{id}(id=${hit.jobId()})} + '#t=' + ${hit.seconds()}">
+            <span class="when" th:text="${hit.at()}">2:03</span>
+            <span class="what">
+                <span class="title" th:text="${titles.get(hit.jobId())}">запись</span>
+                <span class="quote">
+                    <span th:each="part : ${hit.parts()}"
+                          th:classappend="${part.hit()} ? 'mark' : ''"
+                          th:text="${part.text()}">кусок</span>
+                </span>
+            </span>
+        </a>
+    </section>
+</main>
+
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

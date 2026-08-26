@@ -56,7 +56,7 @@ class TranscriptSegmentsTest {
 
         assertThat(segments.importFrom(jobId, txt)).isEqualTo(2);
 
-        List<TranscriptSegmentEntity> saved = segments.of(jobId);
+        List<TranscriptSegmentEntity> saved = segments.of(jobId).segments();
         assertThat(saved).extracting(TranscriptSegmentEntity::getText)
                 .containsExactly("Привет.", "И тебе привет.");
         assertThat(saved).extracting(TranscriptSegmentEntity::getOrd)
@@ -78,7 +78,7 @@ class TranscriptSegmentsTest {
 
         segments.importFrom(jobId, txt);
 
-        assertThat(segments.of(jobId)).extracting(TranscriptSegmentEntity::getSpeaker)
+        assertThat(segments.of(jobId).segments()).extracting(TranscriptSegmentEntity::getSpeaker)
                 .containsExactly("SPEAKER_00", "SPEAKER_01");
     }
 
@@ -96,7 +96,7 @@ class TranscriptSegmentsTest {
                 ]}""");
 
         assertThat(segments.importFrom(jobId, txt)).isEqualTo(1);
-        assertThat(segments.of(jobId)).singleElement()
+        assertThat(segments.of(jobId).segments()).singleElement()
                 .extracting(TranscriptSegmentEntity::getOrd).isEqualTo(0);
     }
 
@@ -112,7 +112,7 @@ class TranscriptSegmentsTest {
                 {"segments":[{"start":0.0,"end":1.0,"text":" Стало."}]}""");
         segments.importFrom(jobId, txt);
 
-        assertThat(segments.of(jobId)).singleElement()
+        assertThat(segments.of(jobId).segments()).singleElement()
                 .extracting(TranscriptSegmentEntity::getText).isEqualTo("Стало.");
     }
 
@@ -124,7 +124,7 @@ class TranscriptSegmentsTest {
         Files.writeString(txt, "Просто текст");
 
         assertThat(segments.importFrom(jobId, txt)).isZero();
-        assertThat(segments.of(jobId)).isEmpty();
+        assertThat(segments.of(jobId).segments()).isEmpty();
     }
 
     /* ───────── helpers ───────── */

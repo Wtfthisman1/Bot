@@ -104,6 +104,11 @@
     <section class="history">
         <h2>История</h2>
 
+        <form method="get" th:action="@{/cabinet/search}" class="inline-search">
+            <input type="search" name="q" placeholder="Поиск по расшифровкам">
+            <button type="submit" class="button ghost">Найти</button>
+        </form>
+
         <p th:if="${#lists.isEmpty(jobs)}" class="empty">
             Пока пусто. Поставьте первую задачу — она появится здесь.
         </p>
@@ -130,6 +135,12 @@
                     <small th:if="${job.error()}" class="why" th:text="${job.error()}">причина</small>
                 </td>
                 <td class="files">
+                    <!--
+                      Открыть расшифровку — первым: читают и правят её чаще, чем
+                      скачивают файлы
+                    -->
+                    <a th:if="${not #lists.isEmpty(job.formats())}" class="chip open"
+                       th:href="@{/cabinet/transcript/{id}(id=${job.id()})}">Открыть</a>
                     <a th:each="format : ${job.formats()}"
                        th:href="@{/cabinet/files/{id}/{format}(id=${job.id()}, format=${format})}"
                        th:switch="${format}" class="chip">

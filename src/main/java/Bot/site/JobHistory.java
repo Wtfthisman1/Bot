@@ -31,7 +31,9 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -66,6 +68,23 @@ public class JobHistory {
                 .limit(PAGE)
                 .map(JobHistory::toEntry)
                 .toList();
+    }
+
+    /**
+     * Все задачи аккаунта: номер и подпись.
+     *
+     * <p>Нужно поиску: он ищет по репликам, но показывать их надо вместе с тем,
+     * из какой они записи. Ограничения в 50 строк здесь нет — это не список
+     * для чтения, а область, в которой разрешено искать.</p>
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> titlesOf(UUID accountId) {
+        Map<UUID, String> titles = new LinkedHashMap<>();
+        for (Owner owner : accounts.ownersOf(accountId)) {
+            jobs.findTop200ByOwnerTypeAndOwnerIdOrderByCreatedAtDesc(owner.type(), owner.id())
+                    .forEach(job -> titles.put(job.getId(), title(job)));
+        }
+        return titles;
     }
 
     /** Задача аккаунта по её номеру; чужая и несуществующая — одинаково пусто. */
