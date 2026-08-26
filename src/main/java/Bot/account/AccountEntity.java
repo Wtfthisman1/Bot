@@ -5,6 +5,10 @@ package Bot.account;
  *
  * <p>Пароль хранится только хешем: {@link AccountService} считает его BCrypt,
  * а сюда исходный пароль не попадает вовсе.</p>
+ *
+ * <p>Ни почты, ни пароля может не быть: аккаунт, заведённый через Telegram,
+ * не знает ни того, ни другого. Что человек предъявляет при входе, описывают
+ * {@link AccountIdentityEntity} и эти три колонки вместе.</p>
  */
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -28,10 +32,11 @@ public class AccountEntity {
     private UUID id;
 
     /** Всегда в нижнем регистре — так требует ограничение в базе. */
-    @Column(nullable = false, unique = true)
+    @Column(unique = true)
     private String email;
 
-    @Column(name = "password_hash", nullable = false)
+    /** Пусто у аккаунта без пароля — вход туда только через провайдера. */
+    @Column(name = "password_hash")
     private String passwordHash;
 
     @Column(name = "display_name")
