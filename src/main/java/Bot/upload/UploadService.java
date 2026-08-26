@@ -9,6 +9,7 @@ package Bot.upload;
  * Фоновая задача: {@code purgeExpired}.</p>
  */
 import Bot.config.Profiles;
+import Bot.owner.Owner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -76,21 +77,26 @@ public class UploadService implements InitializingBean {
     }
 
     /** Сгенерировать одноразовую ссылку вида  {baseUrl}/upload/{token} */
-    public String generate(long chatId) {
+    public String generate(Owner owner) {
         String token = generateShortToken();
-        tokens.put(token, new TokenInfo(chatId, Instant.now().plus(Duration.ofHours(tokenTtlHours))));
+        tokens.put(token, new TokenInfo(owner, Instant.now().plus(Duration.ofHours(tokenTtlHours))));
 
         String link = baseUrl + "/upload/" + token;
-        log.debug("Generated upload link for chatId={}", chatId);
+        log.debug("Выдана ссылка на форму загрузки: владелец={}", owner);
         return link;
     }
 
-    /** Проверить и погасить токен; возвращает chatId либо <code>null</code>. */
-    public Long consume(String token) {
+    /**
+     * Проверить и погасить токен; возвращает владельца либо <code>null</code>.
+     *
+     * <p>Владелец, а не chatId: ту же форму открывает и аккаунт сайта, у
+     * которого чата нет, — а задача всё равно должна лечь на него.</p>
+     */
+    public Owner consume(String token) {
         TokenInfo info = tokens.remove(token);
         if (info == null || info.expireTime().isBefore(Instant.now()))
             return null;
-        return info.chatId();
+        return info.owner();
     }
 
     /** Периодически чистим просроченные токены, чтобы Map не разрасталась. */
@@ -101,5 +107,5 @@ public class UploadService implements InitializingBean {
     }
 
     /* ───────── record ───────── */
-    private record TokenInfo(long chatId, Instant expireTime) {}
+    private record TokenInfo(Owner owner, Instant expireTime) {}
 }

@@ -13,7 +13,12 @@ package Bot.home;
  * задан вовсе.</p>
  */
 import Bot.config.Profiles;
+import Bot.home.HomeProtocol.AcceptanceResponse;
 import Bot.home.HomeProtocol.DownloadRequest;
+import Bot.home.HomeProtocol.BotLoginRequest;
+import Bot.home.HomeProtocol.BotLoginResponse;
+import Bot.home.HomeProtocol.LinkAccountRequest;
+import Bot.home.HomeProtocol.LinkAccountResponse;
 import Bot.home.HomeProtocol.LinkRequest;
 import Bot.home.HomeProtocol.LinkResponse;
 import Bot.home.HomeProtocol.OwnerRequest;
@@ -44,13 +49,13 @@ public class HomeApiController {
     private final LocalHomeApi home;
 
     @PostMapping("/jobs/link")
-    public void transcribeLink(@RequestBody LinkRequest request) {
-        home.transcribeLink(request.owner(), request.url());
+    public AcceptanceResponse transcribeLink(@RequestBody LinkRequest request) {
+        return new AcceptanceResponse(home.transcribeLink(request.owner(), request.url()));
     }
 
     @PostMapping("/jobs/download")
-    public void downloadLink(@RequestBody DownloadRequest request) {
-        home.downloadLink(request.owner(), request.url(), request.media());
+    public AcceptanceResponse downloadLink(@RequestBody DownloadRequest request) {
+        return new AcceptanceResponse(home.downloadLink(request.owner(), request.url(), request.media()));
     }
 
     /**
@@ -62,9 +67,10 @@ public class HomeApiController {
      * самое, что он видит без разделения.</p>
      */
     @PostMapping("/jobs/telegram-file")
-    public void transcribeTelegramFile(@RequestBody TelegramFileRequest request) {
+    public AcceptanceResponse transcribeTelegramFile(@RequestBody TelegramFileRequest request) {
         try {
-            home.transcribeTelegramFile(request.owner(), request.file());
+            return new AcceptanceResponse(
+                    home.transcribeTelegramFile(request.owner(), request.file()));
         } catch (FileTooLargeException e) {
             throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, e.getMessage(), e);
         } catch (Exception e) {
@@ -87,5 +93,17 @@ public class HomeApiController {
     @PostMapping("/transcripts/send")
     public void sendTranscript(@RequestBody TranscriptRequest request) {
         home.sendTranscript(request.owner(), request.jobId(), request.format());
+    }
+
+    @PostMapping("/accounts/bot-login")
+    public BotLoginResponse confirmBotLogin(@RequestBody BotLoginRequest request) {
+        return new BotLoginResponse(home.confirmBotLogin(
+                request.chatId(), request.code(), request.displayName()));
+    }
+
+    @PostMapping("/accounts/link")
+    public LinkAccountResponse linkTelegram(@RequestBody LinkAccountRequest request) {
+        return new LinkAccountResponse(
+                home.linkTelegram(request.chatId(), request.code()).orElse(null));
     }
 }

@@ -9,6 +9,7 @@ package Bot.service;
  * и директории, расчёт статистики.</p>
  */
 import Bot.config.Profiles;
+import Bot.owner.Owner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -152,22 +153,22 @@ public class FileCleanupWorker {
     /**
      * Ручная очистка для конкретного пользователя
      */
-    public void cleanupUserFiles(long chatId) {
+    public void cleanupUserFiles(Owner owner) {
         try {
             Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
-            Path userDir = storageManager.userRoot(chatId);
+            Path userDir = storageManager.userRoot(owner);
             cleanupUserFiles(userDir, cutoff);
         } catch (Exception e) {
-            log.error("Ошибка ручной очистки файлов пользователя {}", chatId, e);
+            log.error("Ошибка ручной очистки файлов владельца {}", owner, e);
         }
     }
 
     /**
      * Получает статистику по файлам пользователя
      */
-    public FileStats getUserFileStats(long chatId) {
+    public FileStats getUserFileStats(Owner owner) {
         try {
-            Path userDir = storageManager.userRoot(chatId);
+            Path userDir = storageManager.userRoot(owner);
             Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
 
             long uploadedFiles = countFilesInDir(userDir.resolve("uploaded"));
@@ -178,7 +179,7 @@ public class FileCleanupWorker {
             return new FileStats(uploadedFiles, downloadedFiles, transcriptFiles, oldFiles);
 
         } catch (Exception e) {
-            log.error("Ошибка получения статистики файлов пользователя {}", chatId, e);
+            log.error("Ошибка получения статистики файлов владельца {}", owner, e);
             return new FileStats(0, 0, 0, 0);
         }
     }

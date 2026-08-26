@@ -30,6 +30,8 @@ public final class HomeProtocol {
     public static final String UPLOAD_LINK = ROOT + "/upload-links";
     public static final String STATUS = ROOT + "/status";
     public static final String TRANSCRIPT = ROOT + "/transcripts/send";
+    public static final String LINK_ACCOUNT = ROOT + "/accounts/link";
+    public static final String BOT_LOGIN = ROOT + "/accounts/bot-login";
 
     private HomeProtocol() {
     }
@@ -44,6 +46,28 @@ public final class HomeProtocol {
 
     public record TranscriptRequest(Owner owner, String jobId, TranscriptFormat format) {}
 
+    /** Код из кабинета и чат, который к нему привязывают. */
+    public record LinkAccountRequest(long chatId, String code) {}
+
+    /** Имя аккаунта, либо {@code null}, если код не подошёл. */
+    public record LinkAccountResponse(String title) {}
+
+    /** Подтверждение входа на сайт: код из браузера и чат, который его подтвердил. */
+    public record BotLoginRequest(long chatId, String code, String displayName) {}
+
+    /** Подошёл ли код. */
+    public record BotLoginResponse(boolean confirmed) {}
+
     /** Ссылка на форму загрузки — единственный ответ, который нужен сразу. */
     public record LinkResponse(String link) {}
+
+    /**
+     * Чем закончился приём задачи.
+     *
+     * <p>Раньше постановка задачи не отвечала ничем: домашняя половина либо
+     * приняла её, либо не ответила вовсе. С квотой появился третий исход —
+     * «нет, лимит исчерпан», — и его надо донести до бота: только у дома есть
+     * база, чтобы это посчитать.</p>
+     */
+    public record AcceptanceResponse(HomeApi.Acceptance acceptance) {}
 }

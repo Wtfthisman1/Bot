@@ -9,6 +9,7 @@ package Bot.telegram;
  * {@code downloadAudio}, {@code downloadVideo}, {@code downloadDocument}.</p>
  */
 import Bot.config.Profiles;
+import Bot.owner.Owner;
 import Bot.service.StorageManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -87,7 +88,7 @@ public class TelegramFileDownloader {
         String tempFileName = "telegram_" + UUID.randomUUID().toString().substring(0, 8) + extension;
         
         // Путь для сохранения
-        Path downloadPath = storageManager.uploadedPath(chatId, tempFileName);
+        Path downloadPath = storageManager.uploadedPath(Owner.telegram(chatId), tempFileName);
         Files.createDirectories(downloadPath.getParent());
         
         // Скачиваем файл

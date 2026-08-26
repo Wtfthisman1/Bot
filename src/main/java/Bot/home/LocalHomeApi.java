@@ -10,10 +10,14 @@ package Bot.home;
  * воркер в одном процессе, эта граница ничего не стоит, а когда бот уедет на
  * VPS, на её месте окажется HTTP-клиент.</p>
  *
- * <p>Хранилище файлов до сих пор разложено по chat id, поэтому имя владельца
- * здесь местами разворачивается обратно в chatId. Переклад под владельца
- * целиком делается вместе с сайтом: раньше — осиротеет всё уже скачанное.</p>
+ * <p>В chatId владелец разворачивается только там, где на той стороне и правда
+ * Telegram: файл забирается у Bot API, расшифровка уходит в чат кнопкой. Всё
+ * остальное — хранилище, очередь, форма загрузки — работает с владельцем
+ * целиком, потому что у аккаунта сайта чата нет.</p>
  */
+import Bot.account.AccountService;
+import Bot.account.BotLoginService;
+import Bot.account.QuotaService;
 import Bot.config.Profiles;
 import Bot.download.DownloadService;
 import Bot.owner.Owner;
@@ -39,6 +43,9 @@ import java.util.List;
 public class LocalHomeApi implements HomeApi {
 
     private final JobStore jobStore;
+    private final QuotaService quotas;
+    private final AccountService accounts;
+    private final BotLoginService botLogins;
     private final DownloadService downloadService;
     private final UploadService uploadService;
     private final TelegramFileDownloader fileDownloader;
@@ -46,6 +53,9 @@ public class LocalHomeApi implements HomeApi {
 
     @Override
     public Acceptance transcribeLink(Owner owner, String url) {
+        if (!quotas.allows(owner)) {
+            return Acceptance.QUOTA_EXCEEDED;
+        }
         jobStore.enqueue(ProcessingJob.newLink(owner, url));
         return Acceptance.STARTED;
     }
@@ -58,6 +68,11 @@ public class LocalHomeApi implements HomeApi {
 
     @Override
     public Acceptance transcribeTelegramFile(Owner owner, TelegramFile file) throws Exception {
+        // Квота проверяется до похода в Bot API: качать файл, который всё равно
+        // не пойдёт в работу, — это минуты канала на пустой отказ
+        if (!quotas.allows(owner)) {
+            return Acceptance.QUOTA_EXCEEDED;
+        }
         long chatId = owner.telegramChatId();
         Path saved = switch (file.kind()) {
             case VOICE -> fileDownloader.downloadVoice(file.fileId(), chatId);
@@ -71,7 +86,7 @@ public class LocalHomeApi implements HomeApi {
 
     @Override
     public String uploadFormLink(Owner owner) {
-        return uploadService.generate(owner.telegramChatId());
+        return uploadService.generate(owner);
     }
 
     @Override
@@ -86,5 +101,15 @@ public class LocalHomeApi implements HomeApi {
     @Override
     public void sendTranscript(Owner owner, String jobId, TranscriptFormat format) {
         transcriptDelivery.sendFormat(owner.telegramChatId(), jobId, format);
+    }
+
+    @Override
+    public boolean confirmBotLogin(long chatId, String code, String displayName) {
+        return botLogins.confirm(chatId, code, displayName);
+    }
+
+    @Override
+    public java.util.Optional<String> linkTelegram(long chatId, String code) {
+        return accounts.redeemLinkCode(code, chatId).map(AccountService.Account::title);
     }
 }

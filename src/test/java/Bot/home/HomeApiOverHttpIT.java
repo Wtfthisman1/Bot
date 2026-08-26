@@ -54,10 +54,17 @@ class HomeApiOverHttpIT {
         assertThat(client("test-key").uploadFormLink(OWNER)).contains("/upload/");
     }
 
-    /** Чужой ключ — 403, и задача не ставится. */
+    /**
+     * Чужой ключ — 403, и задача не ставится.
+     *
+     * <p>Ключ здесь латиницей не для красоты: заголовок с кириллицей до
+     * приложения не доходит вовсе — его отсекает брандмауэр Spring Security,
+     * отвечая 400. Настоящие ключи — base64 от {@code openssl rand}, то есть
+     * ровно тот набор символов, что и здесь.</p>
+     */
     @Test
     void wrongKeyIsRejected() {
-        assertThatThrownBy(() -> client("не тот ключ").transcribeLink(OWNER, "https://vimeo.com/1"))
+        assertThatThrownBy(() -> client("not-the-key").transcribeLink(OWNER, "https://vimeo.com/1"))
                 .isInstanceOf(RestClientResponseException.class)
                 .hasMessageContaining("403");
     }

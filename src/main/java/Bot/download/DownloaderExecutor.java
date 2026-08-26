@@ -8,6 +8,7 @@ package Bot.download;
  * {@link StorageManager}. Основной метод: {@code download}.</p>
  */
 import Bot.config.Profiles;
+import Bot.owner.Owner;
 import Bot.processing.MediaKind;
 import Bot.service.StorageManager;
 import lombok.RequiredArgsConstructor;
@@ -58,12 +59,12 @@ public class DownloaderExecutor {
     private final StorageManager storageManager;
 
     /**
-     * Качает медиа по url в chatId/downloaded/{slug}_{timestamp}{ext}
+     * Качает медиа по url в {owner}/downloaded/{slug}_{timestamp}{ext}
      *
      * @param media что тянуть: только звук (для транскрипции) или видео
      * @return полный {@link Path} к загруженному файлу
      */
-    public Path download(long chatId, String url, MediaKind media)
+    public Path download(Owner owner, String url, MediaKind media)
             throws IOException, InterruptedException {
 
         Objects.requireNonNull(url, "url");
@@ -72,7 +73,7 @@ public class DownloaderExecutor {
             throw new IllegalArgumentException("URL is blank");
 
         /* 1. путь назначения */
-        Path dst = storageManager.downloadedPath(chatId, url, media.extension());
+        Path dst = storageManager.downloadedPath(owner, url, media.extension());
         Files.createDirectories(dst.getParent());
 
         /* 2. где лежит python-скрипт (распаковываем из JAR или берем с диска) */

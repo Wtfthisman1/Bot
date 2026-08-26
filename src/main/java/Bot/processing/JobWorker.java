@@ -138,9 +138,7 @@ public class JobWorker {
 
     private void download(ProcessingJob job) {
         try {
-            // Хранилище пока разложено по чатам; когда появятся аккаунты сайта,
-            // ключом станет владелец целиком
-            Path file = downloader.download(job.owner().telegramChatId(), job.url(), job.media());
+            Path file = downloader.download(job.owner(), job.url(), job.media());
             log.info("Скачано {} (downloadId: {})", file, job.downloadId());
 
             if (job.downloadId() != null) {
@@ -165,7 +163,7 @@ public class JobWorker {
 
     private void transcribe(ProcessingJob job) {
         try {
-            Path txt = transcriber.run(job.owner().telegramChatId(), job.filePath());
+            Path txt = transcriber.run(job.owner(), job.filePath());
             log.info("Транскрипция готова {}", txt);
             jobs.complete(job.id(), txt);
             notifiers.transcriptReady(job.id(), job.owner(), txt);

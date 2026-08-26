@@ -100,13 +100,21 @@ public class JobStore {
         log.debug("Задача переведена на расшифровку: jobId={}", job.shortId());
     }
 
-    /** Задача отработала. {@code result} — расшифровка или скачанный файл. */
+    /**
+     * Задача отработала. {@code result} — расшифровка или скачанный файл.
+     *
+     * <p>Путь запоминается в обоих случаях: до появления сайта скачанный файл
+     * уходил ссылкой сразу и больше был не нужен, а странице «мои задачи» его
+     * надо показать и через день — хотя бы затем, чтобы выдать ссылку заново.</p>
+     */
     @Transactional
     public void complete(UUID id, Path result) {
         JobEntity entity = require(id);
         entity.setState(JobState.DONE);
         if (result != null && entity.getStage() == ProcessingJob.Stage.TRANSCRIBE) {
             entity.setTranscriptPath(result.toString());
+        } else if (result != null) {
+            entity.setFilePath(result.toString());
         }
         entity.setFinishedAt(Instant.now());
         entity.setUpdatedAt(Instant.now());

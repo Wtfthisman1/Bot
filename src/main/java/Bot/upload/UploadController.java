@@ -1,6 +1,8 @@
 package Bot.upload;
 
+import Bot.account.QuotaService;
 import Bot.config.Profiles;
+import Bot.home.HomeApi;
 import Bot.owner.Owner;
 import Bot.processing.JobStore;
 import Bot.processing.ProcessingJob;
@@ -42,6 +44,7 @@ public class UploadController {
     private final UploadService  uploadService;
     private final JobStore       jobStore;
     private final StorageManager storageManager;
+    private final QuotaService   quotas;
 
 
     /* ---------- отдаём форму ---------- */
@@ -62,8 +65,8 @@ public class UploadController {
                                                String[] urls) throws Exception {
 
         /* ---------- 0. проверяем токен ---------- */
-        Long chatId = uploadService.consume(token);
-        if (chatId == null) {
+        Owner owner = uploadService.consume(token);
+        if (owner == null) {
             log.warn("Загрузка отклонена: недействительный или просроченный токен");
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("Недействительный или просроченный токен.");
@@ -74,14 +77,23 @@ public class UploadController {
 
         /* ---------- 1. валидация ---------- */
         if (fileCount == 0 && urlCount == 0) {
-            log.warn("Пустая загрузка: chatId={}", chatId);
+            log.warn("Пустая загрузка: владелец={}", owner);
             return ResponseEntity.badRequest()
                     .body("Нужно выбрать хотя бы один файл или указать хотя бы одну ссылку.");
         }
 
+        // Форма — такая же расшифровка, как ссылка в чате, и лимит у неё общий.
+        // Без этой проверки достаточно было бы прислать файл формой, чтобы
+        // обойти квоту целиком
+        if (!quotas.allows(owner)) {
+            log.info("Загрузка отклонена по квоте: владелец={}", owner);
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(HomeApi.Acceptance.QUOTA_EXCEEDED.userMessage());
+        }
+
         if (fileCount > MAX_SLOTS || urlCount > MAX_SLOTS) {
-            log.warn("Превышен лимит слотов: chatId={}, файлов={}, ссылок={}",
-                    chatId, fileCount, urlCount);
+            log.warn("Превышен лимит слотов: владелец={}, файлов={}, ссылок={}",
+                    owner, fileCount, urlCount);
             return ResponseEntity.badRequest()
                     .body("Максимум " + MAX_SLOTS + " файлов и " + MAX_SLOTS + " ссылок за раз.");
         }
@@ -90,11 +102,11 @@ public class UploadController {
         if (files != null) {
             for (MultipartFile f : files) {
                 if (f == null || f.isEmpty()) continue;
-                Path dst = storageManager.uploadedPath(chatId, f.getOriginalFilename());
-                log.info("Принят файл через форму: chatId={}, имя='{}', размер={} байт",
-                        chatId, f.getOriginalFilename(), f.getSize());
+                Path dst = storageManager.uploadedPath(owner, f.getOriginalFilename());
+                log.info("Принят файл через форму: владелец={}, имя='{}', размер={} байт",
+                        owner, f.getOriginalFilename(), f.getSize());
                 f.transferTo(dst);                                     // сохраняем
-                jobStore.enqueue(ProcessingJob.newFile(Owner.telegram(chatId), dst));  // сразу в очередь
+                jobStore.enqueue(ProcessingJob.newFile(owner, dst));   // сразу в очередь
             }
         }
 
@@ -102,11 +114,11 @@ public class UploadController {
         if (urls != null) {
             for (String u : urls) {
                 if (u == null || u.isBlank()) continue;
-                jobStore.enqueue(ProcessingJob.newLink(Owner.telegram(chatId), u.trim()));
+                jobStore.enqueue(ProcessingJob.newLink(owner, u.trim()));
             }
         }
 
-        log.info("Принято от chat {}: {} файлов, {} ссылок", chatId, fileCount, urlCount);
+        log.info("Принято от {}: {} файлов, {} ссылок", owner, fileCount, urlCount);
         return ResponseEntity.ok("Принято! Задачи поставлены в очередь.");
     }
 }

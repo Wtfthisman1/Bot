@@ -48,6 +48,16 @@ public class CallbackHandler {
             return;
         }
 
+        if (callbackData.startsWith(Keyboards.CB_LOGIN_PREFIX)) {
+            handleLoginConfirmation(chatId, callbackData, userName);
+            return;
+        }
+
+        if (callbackData.startsWith(Keyboards.CB_LINK_PREFIX)) {
+            handleLinkConfirmation(chatId, callbackData);
+            return;
+        }
+
         switch (callbackData) {
             case Keyboards.CB_TRANSCRIBE ->
                     startOrAsk(chatId, new Pending(Mode.TRANSCRIBE, MediaKind.AUDIO), userName);
@@ -71,6 +81,68 @@ public class CallbackHandler {
                 commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
             }
         }
+    }
+
+    /**
+     * Разбирает {@code login:yes|no:<код>} — ответ на просьбу подтвердить вход.
+     *
+     * <p>Отказ ничего не делает намеренно: код просто остаётся неподтверждённым
+     * и через несколько минут протухнет сам. Гасить его по «Это не я» значило бы
+     * дать постороннему способ мешать чужому входу.</p>
+     */
+    private void handleLoginConfirmation(long chatId, String callbackData, String userName) {
+        String[] parts = callbackData.split(":", 3);
+        if (parts.length < 3) {
+            log.warn("Неразбираемое подтверждение входа: chatId={}", chatId);
+            commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
+            return;
+        }
+
+        if (!"yes".equals(parts[1])) {
+            log.info("Вход на сайт отклонён из чата: chatId={}", chatId);
+            commandHandler.showMenu(chatId,
+                    "👌 Понял, вход не подтверждаю. Если ссылку прислал кто-то другой — "
+                            + "просто не открывайте её.");
+            return;
+        }
+
+        try {
+            if (home.confirmBotLogin(chatId, parts[2], userName)) {
+                commandHandler.showMenu(chatId,
+                        "✅ Вход подтверждён. Возвращайтесь на вкладку с сайтом — "
+                                + "она откроет кабинет сама.");
+            } else {
+                commandHandler.showMenu(chatId,
+                        "🕓 Код устарел или уже сработал. Откройте страницу входа заново.");
+            }
+        } catch (Exception e) {
+            log.error("Не удалось подтвердить вход на сайт: chatId={}", chatId, e);
+            commandHandler.showMenu(chatId,
+                    "🌙 Сейчас не выходит подтвердить вход — рабочая машина недоступна.");
+        }
+    }
+
+    /**
+     * Разбирает {@code lnk:yes|no:<код>} — ответ на просьбу привязать чат.
+     *
+     * <p>Отказ, как и у входа, ничего не гасит: код протухнет сам. Гасить его
+     * по «Нет» значило бы дать постороннему способ мешать чужой привязке.</p>
+     */
+    private void handleLinkConfirmation(long chatId, String callbackData) {
+        String[] parts = callbackData.split(":", 3);
+        if (parts.length < 3) {
+            log.warn("Неразбираемое подтверждение привязки: chatId={}", chatId);
+            commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
+            return;
+        }
+
+        if (!"yes".equals(parts[1])) {
+            log.info("Привязка чата отклонена: chatId={}", chatId);
+            commandHandler.showMenu(chatId, "👌 Понял, ничего не связываю.");
+            return;
+        }
+
+        commandHandler.redeemLink(chatId, parts[2]);
     }
 
     /**

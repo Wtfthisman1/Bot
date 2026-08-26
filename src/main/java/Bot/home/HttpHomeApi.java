@@ -15,7 +15,12 @@ package Bot.home;
  * <p>Разрыв связи отделён от ошибки дома: {@link HomeUnavailableException}
  * означает «домашняя машина спит», и пользователю про это говорят прямо.</p>
  */
+import Bot.home.HomeProtocol.AcceptanceResponse;
 import Bot.home.HomeProtocol.DownloadRequest;
+import Bot.home.HomeProtocol.BotLoginRequest;
+import Bot.home.HomeProtocol.BotLoginResponse;
+import Bot.home.HomeProtocol.LinkAccountRequest;
+import Bot.home.HomeProtocol.LinkAccountResponse;
 import Bot.home.HomeProtocol.LinkRequest;
 import Bot.home.HomeProtocol.LinkResponse;
 import Bot.home.HomeProtocol.OwnerRequest;
@@ -33,6 +38,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 @Slf4j
@@ -73,22 +79,19 @@ public class HttpHomeApi implements HomeApi {
 
     @Override
     public Acceptance transcribeLink(Owner owner, String url) {
-        post(HomeProtocol.LINK, new LinkRequest(owner, url));
-        return Acceptance.STARTED;
+        return accept(HomeProtocol.LINK, new LinkRequest(owner, url));
     }
 
     @Override
     public Acceptance downloadLink(Owner owner, String url, MediaKind media) {
-        post(HomeProtocol.DOWNLOAD, new DownloadRequest(owner, url, media));
-        return Acceptance.STARTED;
+        return accept(HomeProtocol.DOWNLOAD, new DownloadRequest(owner, url, media));
     }
 
     /** Дом либо принял файл, либо не ответил вовсе — отложенного «да» здесь нет. */
     @Override
     public Acceptance transcribeTelegramFile(Owner owner, TelegramFile file) throws Exception {
         try {
-            post(HomeProtocol.TELEGRAM_FILE, new TelegramFileRequest(owner, file));
-            return Acceptance.STARTED;
+            return accept(HomeProtocol.TELEGRAM_FILE, new TelegramFileRequest(owner, file));
         } catch (RestClientResponseException e) {
             if (e.getStatusCode() == HttpStatus.PAYLOAD_TOO_LARGE) {
                 // Дом уже сходил в Bot API и получил отказ по размеру —
@@ -125,11 +128,49 @@ public class HttpHomeApi implements HomeApi {
     }
 
     @Override
+    public boolean confirmBotLogin(long chatId, String code, String displayName) {
+        BotLoginResponse response = call(() -> client.post()
+                .uri(HomeProtocol.BOT_LOGIN)
+                .body(new BotLoginRequest(chatId, code, displayName))
+                .retrieve()
+                .body(BotLoginResponse.class));
+        return response != null && response.confirmed();
+    }
+
+    @Override
+    public Optional<String> linkTelegram(long chatId, String code) {
+        LinkAccountResponse response = call(() -> client.post()
+                .uri(HomeProtocol.LINK_ACCOUNT)
+                .body(new LinkAccountRequest(chatId, code))
+                .retrieve()
+                .body(LinkAccountResponse.class));
+        return Optional.ofNullable(response).map(LinkAccountResponse::title);
+    }
+
+    @Override
     public void sendTranscript(Owner owner, String jobId, TranscriptFormat format) {
         post(HomeProtocol.TRANSCRIPT, new TranscriptRequest(owner, jobId, format));
     }
 
     /* ───────── helpers ───────── */
+
+    /**
+     * Ставит задачу и возвращает то, чем дом ответил.
+     *
+     * <p>Пустой ответ считается принятой задачей: так отвечает дом версии, в
+     * которой квоты ещё не было, и обновление половин по очереди не должно
+     * превращать нормальную работу в отказ.</p>
+     */
+    private Acceptance accept(String path, Object body) {
+        AcceptanceResponse response = call(() -> client.post()
+                .uri(path)
+                .body(body)
+                .retrieve()
+                .body(AcceptanceResponse.class));
+        return response == null || response.acceptance() == null
+                ? Acceptance.STARTED
+                : response.acceptance();
+    }
 
     private void post(String path, Object body) {
         call(() -> client.post()

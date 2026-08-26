@@ -7,9 +7,14 @@ package Bot.service;
  * downloaded/transcripts. Используется загрузчиком, транскрипцией и
  * контроллером формы. Ключевые методы: {@code uploadedPath},
  * {@code downloadedPath}, {@code transcriptPath}, {@code getTranscriptsDir}.</p>
+ *
+ * <p>Каталог пользователя выбирается по {@link Owner#storageKey()}, а не по
+ * chatId: у аккаунта сайта чата нет вовсе. Для чатов ключ — тот же chatId,
+ * поэтому уже лежащие на диске каталоги остаются на своих местах.</p>
  */
 import jakarta.annotation.PostConstruct;
 import Bot.config.Profiles;
+import Bot.owner.Owner;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
@@ -46,14 +51,14 @@ public class StorageManager {
 
     /* ---------------- public API ---------------- */
 
-    public Path userRoot(long chatId) throws IOException {
-        Path userPath = storageRoot.resolve(String.valueOf(chatId));
+    public Path userRoot(Owner owner) throws IOException {
+        Path userPath = storageRoot.resolve(owner.storageKey());
         Files.createDirectories(userPath);
         return userPath;
     }
 
-    public Path uploadedPath(long chatId, String originalName) throws IOException {
-        return ensureSubDir(chatId, "uploaded")
+    public Path uploadedPath(Owner owner, String originalName) throws IOException {
+        return ensureSubDir(owner, "uploaded")
                 .resolve(fileName(originalName, null));
     }
 
@@ -61,15 +66,15 @@ public class StorageManager {
      * Путь для скачиваемого медиа. Расширение задаёт вызывающий: аудиодорожка
      * приезжает .m4a, видео — .mp4, а Downloader.py ждёт точное имя файла.
      */
-    public Path downloadedPath(long chatId, String url, String extension) throws IOException {
+    public Path downloadedPath(Owner owner, String url, String extension) throws IOException {
         String title = videoTitle(url);
-        return ensureSubDir(chatId, "downloaded")
+        return ensureSubDir(owner, "downloaded")
                 .resolve(fileName(title, extension));
     }
 
-    public Path transcriptPath(long chatId, String baseName) throws IOException {
+    public Path transcriptPath(Owner owner, String baseName) throws IOException {
         String name = sanitize(baseName).replaceFirst("\\.[^.]+$", "");
-        return ensureSubDir(chatId, "transcripts")
+        return ensureSubDir(owner, "transcripts")
                 .resolve(name+ ".txt");
     }
 
@@ -77,8 +82,8 @@ public class StorageManager {
         return storageRoot;
     }
 
-    public Path getTranscriptsDir(long chatId) throws IOException {
-        return ensureSubDir(chatId, "transcripts");
+    public Path getTranscriptsDir(Owner owner) throws IOException {
+        return ensureSubDir(owner, "transcripts");
     }
 
     /* ---------------- helpers ---------------- */
@@ -211,8 +216,8 @@ public class StorageManager {
     }
 
 
-    private Path ensureSubDir(long chatId, String dirName) throws IOException {
-        Path dir = userRoot(chatId).resolve(dirName);
+    private Path ensureSubDir(Owner owner, String dirName) throws IOException {
+        Path dir = userRoot(owner).resolve(dirName);
         Files.createDirectories(dir);
         return dir;
     }

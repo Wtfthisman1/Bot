@@ -88,8 +88,9 @@ public class SpoolingHomeApi implements HomeApi {
         try {
             if (spool.size() == 0) {
                 try {
-                    send(task);
-                    return Acceptance.STARTED;
+                    // Дом мог и отказать — например, кончилась квота. Это ответ,
+                    // а не сбой: откладывать такую задачу незачем
+                    return send(task);
                 } catch (HomeUnavailableException e) {
                     log.info("Дом не ответил, задача уходит в спул: {}", task.describe());
                 }
@@ -134,8 +135,14 @@ public class SpoolingHomeApi implements HomeApi {
             Set<Owner> resumed = new LinkedHashSet<>();
             for (SpooledTask task : pending) {
                 try {
-                    send(task);
+                    Acceptance answer = send(task);
                     spool.remove(task);
+                    if (answer.isRejected()) {
+                        // Пока задача лежала в спуле, лимит успел кончиться —
+                        // молча выбрасывать её нельзя, человек её ждёт
+                        tell(task.owner(), answer.userMessage());
+                        continue;
+                    }
                     resumed.add(task.owner());
                 } catch (HomeUnavailableException e) {
                     log.debug("Дом всё ещё недоступен, ждём следующего раза");
@@ -150,12 +157,12 @@ public class SpoolingHomeApi implements HomeApi {
         }
     }
 
-    private void send(SpooledTask task) throws Exception {
-        switch (task.kind()) {
+    private Acceptance send(SpooledTask task) throws Exception {
+        return switch (task.kind()) {
             case TRANSCRIBE_LINK -> delegate.transcribeLink(task.owner(), task.url());
             case DOWNLOAD_LINK -> delegate.downloadLink(task.owner(), task.url(), task.media());
             case TELEGRAM_FILE -> delegate.transcribeTelegramFile(task.owner(), task.file());
-        }
+        };
     }
 
     /** Дом ответил ошибкой: пробуем ещё несколько раз, потом честно сдаёмся. */
@@ -217,6 +224,16 @@ public class SpoolingHomeApi implements HomeApi {
     @Override
     public void sendTranscript(Owner owner, String jobId, TranscriptFormat format) {
         delegate.sendTranscript(owner, jobId, format);
+    }
+
+    @Override
+    public java.util.Optional<String> linkTelegram(long chatId, String code) {
+        return delegate.linkTelegram(chatId, code);
+    }
+
+    @Override
+    public boolean confirmBotLogin(long chatId, String code, String displayName) {
+        return delegate.confirmBotLogin(chatId, code, displayName);
     }
 
     /* ───────── helpers ───────── */

@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -47,6 +48,22 @@ public interface JobRepository extends JpaRepository<JobEntity, UUID> {
 
     /** Сколько задач владельца сейчас в этом состоянии — ответ на «Статус». */
     long countByOwnerTypeAndOwnerIdAndState(Owner.OwnerType ownerType, String ownerId, JobState state);
+
+    /**
+     * Сколько расшифровок владелец начал с указанного момента — это и есть
+     * израсходованная квота.
+     *
+     * <p>{@code downloadId is null} отделяет расшифровку от чистого скачивания:
+     * у задачи «скачать файл» идентификатор загрузки есть, и квоту она не
+     * тратит. Сорвавшиеся задачи не считаются: человек не виноват, что ссылка
+     * оказалась битой.</p>
+     */
+    long countByOwnerTypeAndOwnerIdAndDownloadIdIsNullAndStateNotAndCreatedAtGreaterThanEqual(
+            Owner.OwnerType ownerType, String ownerId, JobState state, Instant since);
+
+    /** История задач владельца — то, что показывает страница «мои задачи». */
+    List<JobEntity> findTop200ByOwnerTypeAndOwnerIdOrderByCreatedAtDesc(
+            Owner.OwnerType ownerType, String ownerId);
 
     /**
      * Возвращает в очередь задачи, застрявшие в работе.

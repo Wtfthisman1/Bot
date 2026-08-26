@@ -87,9 +87,11 @@ public class DownloadService {
     public void createDownloadTask(Owner owner, String url, MediaKind media) {
         if (!supportedPlatforms.isSupported(url)) {
             log.warn("Отклонён неподдерживаемый URL на скачивание: владелец={}", owner);
-            messageSender.sendMessage(owner.telegramChatId(),
-                    "❌ Неподдерживаемая или некорректная ссылка.\n\n"
-                            + supportedPlatforms.supportedListText());
+            if (owner.isTelegram()) {
+                messageSender.sendMessage(owner.telegramChatId(),
+                        "❌ Неподдерживаемая или некорректная ссылка.\n\n"
+                                + supportedPlatforms.supportedListText());
+            }
             return;
         }
 
@@ -119,10 +121,16 @@ public class DownloadService {
 
             sendDownloadLink(filePath, info, size);
 
+            if (!info.owner().isTelegram()) {
+                // Аккаунту сайта отправлять некуда: ссылка уже зарегистрирована,
+                // и страница «мои задачи» покажет её вместе с самой задачей
+                return;
+            }
+
             if (size <= telegramMaxBytes) {
                 // Вложение — приятное дополнение к ссылке. Сбой отправки не критичен:
                 // ссылка уже ушла отдельным сообщением
-                messageSender.sendFile(info.chatId(), filePath,
+                messageSender.sendFile(info.owner().telegramChatId(), filePath,
                         "📁 " + filePath.getFileName(), null);
             } else {
                 log.info("Файл больше лимита Bot API ({}), отправлена только ссылка",
@@ -130,8 +138,10 @@ public class DownloadService {
             }
         } catch (Exception e) {
             log.error("Ошибка обработки завершённой загрузки: downloadId={}", downloadId, e);
-            messageSender.sendMessage(info.chatId(),
-                    "❌ Файл скачан, но ссылку сформировать не удалось. Попробуйте ещё раз.");
+            if (info.owner().isTelegram()) {
+                messageSender.sendMessage(info.owner().telegramChatId(),
+                        "❌ Файл скачан, но ссылку сформировать не удалось. Попробуйте ещё раз.");
+            }
         }
     }
 
@@ -142,7 +152,11 @@ public class DownloadService {
             return;
         }
 
-        messageSender.sendMessageWithKeyboard(info.chatId(),
+        if (!info.owner().isTelegram()) {
+            // Причина отказа уже записана в задаче — её видно в истории на сайте
+            return;
+        }
+        messageSender.sendMessageWithKeyboard(info.owner().telegramChatId(),
                 "❌ Не удалось скачать файл.\n\n" + error, null, Keyboards.mainMenu());
     }
 
@@ -160,7 +174,7 @@ public class DownloadService {
     }
 
     private static DownloadInfo toInfo(JobStore.DownloadJob job) {
-        return new DownloadInfo(job.owner().telegramChatId(), job.url(), job.startedAt().toEpochMilli());
+        return new DownloadInfo(job.owner(), job.url(), job.startedAt().toEpochMilli());
     }
 
     /* ───────── helpers ───────── */
@@ -173,10 +187,14 @@ public class DownloadService {
      * не доходило совсем.</p>
      */
     private void sendDownloadLink(Path filePath, DownloadInfo info, long size) {
-        String token = downloadTokenRegistry.register(filePath, Owner.telegram(info.chatId()));
+        String token = downloadTokenRegistry.register(filePath, info.owner());
         String link = downloadBaseUrl + "/download/" + token;
-        log.info("Выдана ссылка на скачивание: chatId={}, файл={}",
-                info.chatId(), filePath.getFileName());
+        log.info("Выдана ссылка на скачивание: владелец={}, файл={}",
+                info.owner(), filePath.getFileName());
+
+        if (!info.owner().isTelegram()) {
+            return;   // сообщение отправлять некуда — ссылку покажет страница задач
+        }
 
         String message = """
                 ✅ <b>Файл готов</b>
@@ -193,7 +211,7 @@ public class DownloadService {
                 MessageSender.escapeHtml(link),
                 linkTtlHours);
 
-        messageSender.sendMessageWithKeyboard(info.chatId(), message.strip(), "HTML",
+        messageSender.sendMessageWithKeyboard(info.owner().telegramChatId(), message.strip(), "HTML",
                 Keyboards.mainMenu());
     }
 
@@ -205,5 +223,5 @@ public class DownloadService {
     }
 
     /** Информация о загрузке. */
-    public record DownloadInfo(long chatId, String url, long startTime) {}
+    public record DownloadInfo(Owner owner, String url, long startTime) {}
 }

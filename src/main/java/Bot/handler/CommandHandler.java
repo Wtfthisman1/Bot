@@ -33,6 +33,12 @@ public class CommandHandler {
     private final MessageSender messageSender;
     private final UserSessionService sessionService;
 
+    /** Приставка полезной нагрузки {@code /start}, которой сайт просит подтвердить вход. */
+    private static final String LOGIN_PAYLOAD = "login_";
+
+    /** То же для привязки этого чата к аккаунту на сайте. */
+    private static final String LINK_PAYLOAD = "link_";
+
     /** Маршрутизация текстовых команд на те же экраны, что и кнопки. */
     public void handleCommand(long chatId, String text, String name) {
         // «/start@MyBot» и «/start payload» — тоже /start
@@ -40,12 +46,24 @@ public class CommandHandler {
         log.info("Команда: chatId={}, команда='{}'", chatId, command);
 
         switch (command) {
-            case "/start" -> start(chatId, name);
+            case "/start" -> {
+                // По ссылке с сайта Telegram присылает «/start login_<код>»:
+                // это не приветствие, а просьба подтвердить вход
+                String payload = payloadOf(text);
+                if (payload.startsWith(LOGIN_PAYLOAD)) {
+                    askLoginConfirmation(chatId, payload.substring(LOGIN_PAYLOAD.length()));
+                } else if (payload.startsWith(LINK_PAYLOAD)) {
+                    askLinkConfirmation(chatId, payload.substring(LINK_PAYLOAD.length()));
+                } else {
+                    start(chatId, name);
+                }
+            }
             case "/help" -> help(chatId);
             case "/transcribe" -> askForLink(chatId, Mode.TRANSCRIBE, MediaKind.AUDIO);
             case "/download" -> askDownloadKind(chatId);
             case "/upload" -> upload(chatId);
             case "/status" -> status(chatId);
+            case "/link" -> link(chatId, text);
             case "/cancel" -> cancel(chatId);
             default -> {
                 log.info("Неизвестная команда: chatId={}, команда='{}'", chatId, command);
@@ -110,6 +128,13 @@ public class CommandHandler {
                 📦 <b>Ограничения:</b>
                 • До 20 МБ — можно прямо в чат
                 • Больше 20 МБ — Telegram не отдаёт файл боту, нужна форма загрузки
+                • Расшифровок — три в месяц; скачивание в лимит не входит
+
+                🔐 <b>Сайт</b> — та же история задач и тот же лимит.
+                Войти можно прямо через этого бота, без номера телефона:
+                кнопка «Войти через бота» на transcribot.site.
+                Если аккаунт на сайте уже заведён иначе, пришлите код из
+                кабинета: <code>/link КОД</code>
 
                 🔗 <b>Ссылки:</b> YouTube, Vimeo, TikTok, Instagram, Twitter/X, Facebook
 
@@ -135,6 +160,93 @@ public class CommandHandler {
                 """.formatted(MessageSender.escapeHtml(link));
 
         messageSender.sendMessage(chatId, html.strip(), "HTML");
+    }
+
+    /**
+     * Спрашивает, точно ли это тот самый человек входит на сайт.
+     *
+     * <p>Подтверждение отдельной кнопкой, а не самим переходом по ссылке: её
+     * можно прислать постороннему, и тогда нажатие «Запустить» пустило бы
+     * отправителя в чужой аккаунт. В тексте назван домен — человек видит,
+     * куда именно его пускают.</p>
+     */
+    public void askLoginConfirmation(long chatId, String code) {
+        if (code.isBlank()) {
+            start(chatId, null);
+            return;
+        }
+        log.info("Запрошено подтверждение входа на сайт: chatId={}", chatId);
+        messageSender.sendMessageWithKeyboard(chatId,
+                "🔐 Подтвердите вход на сайт <b>transcribot.site</b>.\n\n"
+                        + "Если вы сейчас не открывали страницу входа — нажмите «Это не я»: "
+                        + "ссылку мог прислать кто-то другой.",
+                "HTML", Keyboards.loginConfirm(code));
+    }
+
+    /**
+     * Спрашивает, привязывать ли этот чат к аккаунту с сайта.
+     *
+     * <p>Отдельное подтверждение по той же причине, что и у входа: ссылку с
+     * кодом можно прислать другому человеку, и без вопроса его переписка
+     * досталась бы отправителю — вместе с расшифровками.</p>
+     */
+    public void askLinkConfirmation(long chatId, String code) {
+        if (code.isBlank()) {
+            start(chatId, null);
+            return;
+        }
+        log.info("Запрошено подтверждение привязки чата: chatId={}", chatId);
+        messageSender.sendMessageWithKeyboard(chatId,
+                "🔗 Связать этот чат с вашим аккаунтом на <b>transcribot.site</b>?\n\n"
+                        + "После этого всё, что вы пришлёте боту, будет видно в кабинете, "
+                        + "а лимит расшифровок станет общим.\n\n"
+                        + "Если вы не открывали кабинет и не просили код — нажмите «Нет».",
+                "HTML", Keyboards.linkConfirm(code));
+    }
+
+    /**
+     * Привязка переписки к аккаунту сайта: {@code /link КОД}.
+     *
+     * <p>Код человек берёт в кабинете. После привязки задачи из чата видны на
+     * сайте, а квота у них общая — до этого момента бот знает только chat id и
+     * считает такую переписку отдельным человеком.</p>
+     */
+    public void link(long chatId, String text) {
+        String[] parts = text.trim().split("\\s+", 2);
+        if (parts.length < 2 || parts[1].isBlank()) {
+            messageSender.sendMessage(chatId,
+                    "🔗 Пришлите код так: <code>/link КОД</code>\n\n"
+                            + "Код выдаёт кабинет на сайте — кнопка «Получить код привязки».",
+                    "HTML");
+            return;
+        }
+
+        redeemLink(chatId, parts[1].trim());
+    }
+
+    /**
+     * Гасит код привязки и отвечает человеку.
+     *
+     * <p>Сюда сходятся оба пути — набранная команда {@code /link КОД} и кнопка
+     * под ссылкой с сайта, — чтобы тексты ответов не разъезжались.</p>
+     */
+    public void redeemLink(long chatId, String code) {
+        try {
+            home.linkTelegram(chatId, code).ifPresentOrElse(
+                    title -> {
+                        log.info("Чат привязан к аккаунту: chatId={}", chatId);
+                        showMenu(chatId, "✅ Готово. Этот чат теперь принадлежит аккаунту «"
+                                + title + "» — задачи и лимит у них общие.");
+                    },
+                    () -> messageSender.sendMessage(chatId,
+                            "❌ Код не подошёл: он мог устареть или уже сработать. "
+                                    + "Возьмите новый в кабинете."));
+        } catch (Exception e) {
+            log.error("Не удалось привязать чат к аккаунту: chatId={}", chatId, e);
+            messageSender.sendMessage(chatId,
+                    "🌙 Сейчас привязку сделать не получится — рабочая машина недоступна. "
+                            + "Попробуйте позже.");
+        }
     }
 
     /** Короткая сводка по задачам пользователя. */
@@ -171,5 +283,11 @@ public class CommandHandler {
             log.error("Ошибка получения статуса: chatId={}", chatId, e);
             messageSender.sendMessage(chatId, "❌ Не удалось получить статус. Попробуйте позже.");
         }
+    }
+
+    /** То, что идёт после команды: «/start login_ABC» → «login_ABC». */
+    private static String payloadOf(String text) {
+        String[] parts = text.trim().split("\\s+", 2);
+        return parts.length < 2 ? "" : parts[1].trim();
     }
 }

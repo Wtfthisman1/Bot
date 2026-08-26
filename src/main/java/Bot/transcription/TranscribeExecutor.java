@@ -9,6 +9,7 @@ package Bot.transcription;
  * возвращает путь к .txt с транскриптом.</p>
  */
 import Bot.config.Profiles;
+import Bot.owner.Owner;
 import Bot.processing.GpuLock;
 import Bot.service.StorageManager;
 import lombok.RequiredArgsConstructor;
@@ -95,15 +96,15 @@ public class TranscribeExecutor {
     /**
      * Запускает whisper-ctranslate2 и возвращает путь к .txt-транскрипту
      */
-    public Path run(long chatId, Path video) throws IOException, InterruptedException {
+    public Path run(Owner owner, Path video) throws IOException, InterruptedException {
 
         Objects.requireNonNull(video, "video");
         if (!Files.exists(video))
             throw new IOException("Видеофайл не найден: " + video);
 
         long startedAt = System.currentTimeMillis();
-        log.info("Начинаю транскрипцию: chatId={}, файл={}, размер={} МБ",
-                chatId, video.getFileName(), Files.size(video) / 1048576);
+        log.info("Начинаю транскрипцию: владелец={}, файл={}, размер={} МБ",
+                owner, video.getFileName(), Files.size(video) / 1048576);
 
         /* 1. где лежит скрипт */
         String script = resolveScript(scriptPath);
@@ -112,7 +113,7 @@ public class TranscribeExecutor {
         /* 2. куда писать результат */
         String baseName = video.getFileName().toString()
                 .replaceFirst("\\.[^.]+$", "");     // без расширения
-        Path   txtFile  = storageManager.transcriptPath(chatId, baseName);
+        Path   txtFile  = storageManager.transcriptPath(owner, baseName);
 
         Files.createDirectories(txtFile.getParent());
 

@@ -38,6 +38,17 @@ public final class Keyboards {
      */
     public static final String CB_TRANSCRIPT_PREFIX = "tr:";
 
+    /**
+     * Подтверждение входа на сайт: {@code login:yes:<код>} и {@code login:no:<код>}.
+     *
+     * <p>Код — 22 символа, вместе с префиксом это 32 байта: лимит Telegram
+     * в 64 байта на всю строку выдержан с запасом.</p>
+     */
+    public static final String CB_LOGIN_PREFIX = "login:";
+
+    /** Подтверждение привязки чата к аккаунту: {@code link:yes:<код>} и {@code link:no:<код>}. */
+    public static final String CB_LINK_PREFIX = "lnk:";
+
     private Keyboards() {
     }
 
@@ -88,6 +99,32 @@ public final class Keyboards {
     /** Строка {@code callback_data} для кнопки формата — собирается только здесь. */
     public static String transcriptCallback(TranscriptFormat format, String id) {
         return CB_TRANSCRIPT_PREFIX + format.code() + ':' + id;
+    }
+
+    /**
+     * Подтвердить или отклонить вход на сайт.
+     *
+     * <p>Две кнопки, а не одна: человек мог открыть чужую ссылку, и «Это не я»
+     * должно быть таким же простым действием, как согласие.</p>
+     */
+    public static InlineKeyboardMarkup loginConfirm(String code) {
+        return keyboard(
+                List.of(button("✅ Это я, войти", CB_LOGIN_PREFIX + "yes:" + code)),
+                List.of(button("❌ Это не я", CB_LOGIN_PREFIX + "no:" + code))
+        );
+    }
+
+    /**
+     * Привязать этот чат к аккаунту на сайте или отказаться.
+     *
+     * <p>Как и у входа, две кнопки: ссылку с кодом можно прислать чужому
+     * человеку, и тогда его переписка досталась бы отправителю.</p>
+     */
+    public static InlineKeyboardMarkup linkConfirm(String code) {
+        return keyboard(
+                List.of(button("✅ Да, это мой аккаунт", CB_LINK_PREFIX + "yes:" + code)),
+                List.of(button("❌ Нет", CB_LINK_PREFIX + "no:" + code))
+        );
     }
 
     /** Показывается, пока бот ждёт ссылку: единственный осмысленный выход — отмена. */

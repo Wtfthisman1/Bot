@@ -23,6 +23,7 @@ import Bot.transcription.TranscriptFormat;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 public interface HomeApi {
 
@@ -58,6 +59,26 @@ public interface HomeApi {
     void sendTranscript(Owner owner, String jobId, TranscriptFormat format);
 
     /**
+     * Привязывает чат к аккаунту сайта по коду из кабинета.
+     *
+     * <p>Аккаунты живут в базе, то есть дома, — поэтому решает дом. Пустой
+     * ответ означает «код неизвестен, просрочен или уже сработал»: различать
+     * эти случаи нельзя, иначе код можно было бы подбирать.</p>
+     *
+     * @return как называть аккаунт в подтверждении
+     */
+    Optional<String> linkTelegram(long chatId, String code);
+
+    /**
+     * Подтверждает вход на сайт по коду, показанному в браузере.
+     *
+     * <p>Коды живут дома вместе с аккаунтами, а кнопку нажимают в чате, то есть
+     * на стороне бота. Ответ {@code false} означает «код не подошёл» — неважно,
+     * неизвестен он, просрочен или уже сработал.</p>
+     */
+    boolean confirmBotLogin(long chatId, String code, String displayName);
+
+    /**
      * Началась ли работа прямо сейчас.
      *
      * <p>Домашняя машина включена не круглосуточно, а бот на VPS — всегда.
@@ -70,7 +91,17 @@ public interface HomeApi {
         STARTED("✅ Всё запущено, ожидайте."),
         /** Дом недоступен: задача лежит в спуле и ждёт его пробуждения. */
         DEFERRED("🌙 Принято. Рабочая машина сейчас спит — работа начнётся, "
-                + "как только она проснётся.");
+                + "как только она проснётся."),
+        /**
+         * Бесплатные расшифровки этого месяца закончились.
+         *
+         * <p>Отдельный исход, а не исключение: это не поломка, а обычный ответ
+         * «нет». Считает его дом — только у него есть база с историей, — а
+         * сказать человеку должен бот, который принял сообщение.</p>
+         */
+        QUOTA_EXCEEDED("🚫 Бесплатные расшифровки на этот месяц закончились.\n\n"
+                + "Новые появятся первого числа. Скачивание файлов работает "
+                + "по-прежнему — оно в лимит не входит.");
 
         private final String userMessage;
 
@@ -87,8 +118,19 @@ public interface HomeApi {
             return this == DEFERRED;
         }
 
-        /** Пачка задач отложена, если отложена хоть одна из них. */
+        public boolean isRejected() {
+            return this == QUOTA_EXCEEDED;
+        }
+
+        /**
+         * Итог по пачке ссылок: важнее всего сказать про отказ, затем — про сон
+         * машины. «Запущено» — самый слабый исход: он не объясняет ничего,
+         * чего человек не ждал бы и так.
+         */
         public Acceptance and(Acceptance other) {
+            if (this == QUOTA_EXCEEDED || other == QUOTA_EXCEEDED) {
+                return QUOTA_EXCEEDED;
+            }
             return this == DEFERRED || other == DEFERRED ? DEFERRED : STARTED;
         }
     }
