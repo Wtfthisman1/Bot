@@ -43,6 +43,9 @@ public class TranscribeExecutor {
     /** Префикс строки stderr, которой Transcribe.py сообщает определённый язык. */
     private static final String DETECTED_LANGUAGE_MARKER = "[transcribe] detected-language=";
 
+    /** Тем же способом скрипт сообщает, сколько голосов нашла диаризация. */
+    private static final String SPEAKERS_MARKER = "[transcribe] speakers=";
+
     private final GpuLock gpuLock;
 
     /** whisper.script = classpath:pythonScript/Transcribe.py */
@@ -80,6 +83,25 @@ public class TranscribeExecutor {
     private String initialPrompt;
     @Value("${whisper.ct-binary:whisper-ctranslate2}")
     private String ctBinary;
+
+    /* ── Диаризация: кто говорит ── */
+    /**
+     * Второй проход по тому же звуку уже после Whisper. Выключена по умолчанию:
+     * без токена Hugging Face модель просто не скачается, а задачи должны
+     * считаться и там, где токена нет.
+     */
+    @Value("${diarize.enabled:false}")
+    private boolean diarize;
+    /** Токен Hugging Face: без него pyannote не отдаёт веса. */
+    @Value("${diarize.hf-token:}")
+    private String hfToken;
+    @Value("${diarize.model:pyannote/speaker-diarization-3.1}")
+    private String diarizeModel;
+    /** Границы числа голосов; пусто — pyannote решает сам. */
+    @Value("${diarize.min-speakers:}")
+    private String minSpeakers;
+    @Value("${diarize.max-speakers:}")
+    private String maxSpeakers;
 
     /** Дольше этой паузы без вывода — уже повод для WARN, а не для «всё идёт». */
     private static final long SILENCE_WARN_SECONDS = 180;
@@ -138,6 +160,11 @@ public class TranscribeExecutor {
         env.put("WHISPER_CLEAN_AUDIO", String.valueOf(cleanAudio));
         env.put("WHISPER_INITIAL_PROMPT", initialPrompt != null ? initialPrompt : "");
         env.put("WHISPER_CT_BINARY", ctBinary);
+        env.put("WHISPER_DIARIZE", String.valueOf(diarize));
+        env.put("HF_TOKEN", hfToken != null ? hfToken : "");
+        env.put("DIARIZE_MODEL", diarizeModel);
+        env.put("DIARIZE_MIN_SPEAKERS", minSpeakers != null ? minSpeakers : "");
+        env.put("DIARIZE_MAX_SPEAKERS", maxSpeakers != null ? maxSpeakers : "");
 
         // Видеокарта занимается ровно на время работы Whisper. Подготовка выше и
         // проверки файла ниже её не трогают — держать пропуск дольше значило бы
@@ -157,6 +184,7 @@ public class TranscribeExecutor {
         AtomicReference<String> lastLine = new AtomicReference<>("");
         AtomicLong segmentCount = new AtomicLong();
         AtomicReference<String> detectedLanguage = new AtomicReference<>("");
+        AtomicReference<String> speakers = new AtomicReference<>("");
 
         Thread tOut = streamToLog(proc.getInputStream(), ln -> {
             lastOutputAt.set(System.currentTimeMillis());
@@ -179,6 +207,9 @@ public class TranscribeExecutor {
             if (ln.startsWith(DETECTED_LANGUAGE_MARKER)) {
                 detectedLanguage.set(ln.substring(DETECTED_LANGUAGE_MARKER.length()).trim());
             }
+            if (ln.startsWith(SPEAKERS_MARKER)) {
+                speakers.set(ln.substring(SPEAKERS_MARKER.length()).trim());
+            }
             log.debug("[WHISPER:err] {}", ln);
             errBuf.append(ln).append('\n');
         });
@@ -191,9 +222,10 @@ public class TranscribeExecutor {
             proc.destroyForcibly();
             throw new RuntimeException("Whisper timeout > " + timeoutMinutes + " мин");
         }
-        log.info("Whisper завершился с кодом {}: сегментов={}, язык={}, заняло {}",
+        log.info("Whisper завершился с кодом {}: сегментов={}, язык={}, голосов={}, заняло {}",
                 proc.exitValue(), segmentCount.get(),
                 detectedLanguage.get().isEmpty() ? "не определён" : detectedLanguage.get(),
+                speakers.get().isEmpty() ? (diarize ? "не размечены" : "не размечались") : speakers.get(),
                 humanDuration(System.currentTimeMillis() - startedAt));
 
         tOut.join();  tErr.join();

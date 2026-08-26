@@ -53,3 +53,7 @@ out/
 /upload/
 /download/
 /transcripts/
+
+# Кеш интерпретатора Python рядом со скриптами
+__pycache__/
+*.pyc

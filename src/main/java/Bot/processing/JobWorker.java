@@ -22,6 +22,7 @@ import Bot.download.DownloadService;
 import Bot.download.DownloaderExecutor;
 import Bot.notify.JobNotifiers;
 import Bot.telegram.TelegramBot;
+import Bot.transcription.TranscriptSegments;
 import Bot.transcription.TranscribeExecutor;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -56,6 +57,7 @@ public class JobWorker {
     private final TranscribeExecutor transcriber;
     private final JobNotifiers notifiers;
     private final DownloadService downloadService;
+    private final TranscriptSegments transcriptSegments;
 
     private volatile boolean running = true;
     private ExecutorService pool;
@@ -166,6 +168,10 @@ public class JobWorker {
             Path txt = transcriber.run(job.owner(), job.filePath());
             log.info("Транскрипция готова {}", txt);
             jobs.complete(job.id(), txt);
+            // Разметка со временем — уже после complete: сегменты нужны сайту,
+            // а чат получит расшифровку файлом в любом случае, даже если разбор
+            // не задался
+            transcriptSegments.importFrom(job.id(), txt);
             notifiers.transcriptReady(job.id(), job.owner(), txt);
         } catch (Exception e) {
             log.error("Ошибка транскрипции для файла: {}", job.filePath(), e);

@@ -23,9 +23,19 @@ Transcribe.py — транскрипция через whisper-ctranslate2 (faste
     WHISPER_CLEAN_AUDIO    мягкая очистка звука true/false  (по умолч. false)
     WHISPER_INITIAL_PROMPT подсказка темы                   (по умолч. пусто)
     WHISPER_CT_BINARY      путь/имя бинаря whisper-ctranslate2 (по умолч. на PATH)
+    WHISPER_DIARIZE        размечать говорящих true/false   (по умолч. false)
+    HF_TOKEN               токен Hugging Face для pyannote  (без него диаризации нет)
+    DIARIZE_MODEL          модель диаризации  (по умолч. pyannote/speaker-diarization-3.1)
+    DIARIZE_MIN_SPEAKERS   нижняя граница числа голосов     (по умолч. не задана)
+    DIARIZE_MAX_SPEAKERS   верхняя граница числа голосов    (по умолч. не задана)
+
+Диаризация (кто говорит) — необязательный второй проход по тому же wav уже
+после того, как whisper закончил и освободил видеокарту. Метки говорящих
+дописываются в .json к сегментам; текст и субтитры не меняются.
 
 Зависимости: ffmpeg в системе, whisper-ctranslate2 в окружении
     pip install -U whisper-ctranslate2
+    pip install pyannote.audio      # только для диаризации
 """
 
 import os
@@ -76,6 +86,98 @@ def resolve_binary(name: str) -> str:
     return found if found else name  # иначе пусть PATH разрулит (или упадём с FileNotFound)
 
 
+def diarize(wav_path: Path, json_path: Path, device: str) -> None:
+    """
+    Размечает, кто говорит, и дописывает метки в .json рядом с расшифровкой.
+
+    Второй проход по тому же wav, а не whisperX вместо whisper: набор флагов
+    whisper-ctranslate2 подобран против галлюцинаций и зацикливания, и менять
+    движок ради одних меток — значит проверять качество распознавания заново.
+
+    Ошибка здесь не должна ронять задачу: расшифровка уже готова, и «текст без
+    имён» лучше, чем «ошибка вместо текста».
+    """
+    token = env_str("HF_TOKEN", "")
+    if not token:
+        sys.stderr.write("[transcribe] диаризация пропущена: не задан HF_TOKEN\n")
+        return
+
+    model = env_str("DIARIZE_MODEL", "pyannote/speaker-diarization-3.1")
+
+    try:
+        import torch
+        from pyannote.audio import Pipeline
+    except ImportError as e:
+        sys.stderr.write(f"[transcribe] диаризация пропущена, нет зависимостей: {e}\n")
+        sys.stderr.write("[transcribe] установите: pip install pyannote.audio\n")
+        return
+
+    try:
+        sys.stderr.write(f"[transcribe] диаризация ({model}) ...\n")
+        pipeline = Pipeline.from_pretrained(model, use_auth_token=token)
+        if pipeline is None:
+            # from_pretrained молча возвращает None, когда условия модели на
+            # Hugging Face не приняты или токен не даёт к ней доступа
+            sys.stderr.write("[transcribe] диаризация недоступна: примите условия модели "
+                             f"на https://hf.co/{model} тем же аккаунтом, чей токен задан\n")
+            return
+
+        # Видеокарта к этому моменту свободна: whisper был отдельным процессом
+        # и уже завершился
+        if device.lower() == "cuda" and torch.cuda.is_available():
+            pipeline.to(torch.device("cuda"))
+
+        limits = {}
+        for name, key in (("min_speakers", "DIARIZE_MIN_SPEAKERS"),
+                          ("max_speakers", "DIARIZE_MAX_SPEAKERS")):
+            raw = env_str(key, "")
+            if raw:
+                limits[name] = int(raw)
+
+        annotation = pipeline(str(wav_path), **limits)
+        turns = [(turn.start, turn.end, speaker)
+                 for turn, _, speaker in annotation.itertracks(yield_label=True)]
+    except Exception as e:
+        sys.stderr.write(f"[transcribe] диаризация не удалась: {e}\n")
+        return
+
+    if not turns:
+        sys.stderr.write("[transcribe] диаризация: голосов не найдено\n")
+        return
+
+    try:
+        markup = json.loads(json_path.read_text(encoding="utf-8"))
+        segments = markup.get("segments") or []
+        assign_speakers(segments, turns)
+        json_path.write_text(json.dumps(markup, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        sys.stderr.write(f"[transcribe] метки говорящих не записаны: {e}\n")
+        return
+
+    speakers = sorted({speaker for _, _, speaker in turns})
+    sys.stderr.write(f"[transcribe] speakers={len(speakers)}\n")
+
+
+def assign_speakers(segments, turns) -> None:
+    """
+    Каждому сегменту — тот голос, с которым он совпадает по времени сильнее.
+
+    Границы whisper и pyannote не совпадают: whisper режет по паузам в речи,
+    pyannote — по смене голоса. Поэтому не «кто говорил в начале сегмента», а
+    «кто говорил дольше внутри него»: на перебивках первое даёт чужое имя.
+    """
+    for segment in segments:
+        start = segment.get("start") or 0.0
+        end = segment.get("end") or start
+        best, best_overlap = None, 0.0
+        for turn_start, turn_end, speaker in turns:
+            overlap = min(end, turn_end) - max(start, turn_start)
+            if overlap > best_overlap:
+                best, best_overlap = speaker, overlap
+        if best is not None:
+            segment["speaker"] = best
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         sys.stderr.write("Usage: Transcribe.py <input> <output.txt>\n")
@@ -98,6 +200,7 @@ def main() -> int:
     language      = env_str("WHISPER_LANGUAGE", "auto")
     clean_audio   = env_bool("WHISPER_CLEAN_AUDIO", False)
     initial_prompt = env_str("WHISPER_INITIAL_PROMPT", "")
+    want_diarize   = env_bool("WHISPER_DIARIZE", False)
     binary         = resolve_binary(env_str("WHISPER_CT_BINARY", "whisper-ctranslate2"))
 
     # временный wav рядом с результатом, имя предсказуемое (по нему найдём txt)
@@ -156,6 +259,11 @@ def main() -> int:
         for ext, src in sidecars.items():
             if src.exists():
                 shutil.move(str(src), str(out_txt.with_suffix(ext)))
+
+        # Диаризация — до удаления временного wav в finally: другого 16 kHz mono
+        # у нас нет, а гонять ffmpeg второй раз ради того же файла незачем
+        if want_diarize:
+            diarize(tmp_wav, out_txt.with_suffix(".json"), device)
 
         # Язык из .json — по нему вызывающая сторона выберет языковую модель.
         # Ошибка разбора не должна ронять задачу: транскрипция уже готова.
