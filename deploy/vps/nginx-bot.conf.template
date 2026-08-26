@@ -48,13 +48,32 @@ server {
     proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    # ── Наружу открыты ТОЛЬКО эти два маршрута ──
-    location /download/ { proxy_pass http://HOME_WG_IP:8080; }
-    location /upload/   { proxy_pass http://HOME_WG_IP:8080; }
+    # ── Что наружу не выходит ни при каких условиях ──
+    # Внутренние адреса дома: по ним бот ставит задачи от имени любого
+    # владельца. Ключ в заголовке их защищает, но выставлять их в интернет
+    # незачем — бот ходит по ним внутри туннеля.
+    location /internal/ { return 404; }
+    # Actuator и так слушает отдельный порт на 127.0.0.1, но полагаться
+    # на одну преграду не стоит.
+    location /actuator  { return 404; }
 
-    # Всё остальное не выходит наружу. Actuator и так слушает отдельный порт
-    # на 127.0.0.1, но полагаться на одну преграду не стоит.
-    location / { return 404; }
+    # ── Всё остальное — домой ──
+    # Сайт (страницы входа и кабинет), ссылки на скачивание и форма загрузки
+    # живут в одном приложении на домашней машине.
+    location / {
+        proxy_pass http://HOME_WG_IP:8080;
+
+        # Дом спит — не пугать пятисоткой nginx: страница объясняет,
+        # что машина выключена, и что задачу всё равно примет бот
+        proxy_intercept_errors on;
+        error_page 502 504 = @asleep;
+    }
+
+    location @asleep {
+        root /var/www/transcribot;
+        try_files /asleep.html =503;
+        internal;
+    }
 
     access_log /var/log/nginx/bot-access.log;
     error_log  /var/log/nginx/bot-error.log;

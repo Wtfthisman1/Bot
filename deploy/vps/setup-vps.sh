@@ -96,6 +96,41 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 echo "HTTP-сайт поднят"
 
+say "страница на случай спящего дома"
+mkdir -p /var/www/transcribot
+chmod 755 /var/www/transcribot
+# Отдаётся вместо 502, когда домашняя машина выключена. Лежит на VPS, потому
+# что показать её должен как раз тот, кто до дома не достучался.
+cat > /var/www/transcribot/asleep.html <<'HTML'
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Рабочая машина спит</title>
+    <style>
+        body { background:#10131a; color:#e8ecf3; font:16px/1.6 system-ui, sans-serif;
+               display:flex; align-items:center; justify-content:center;
+               min-height:100vh; margin:0; }
+        div { max-width:420px; padding:24px; }
+        h1 { font-size:22px; margin:0 0 12px; }
+        p { color:#97a1b3; }
+        a { color:#4c8dff; }
+    </style>
+</head>
+<body>
+<div>
+    <h1>🌙 Рабочая машина сейчас спит</h1>
+    <p>Сайт живёт на домашнем компьютере с видеокартой — он включён не круглосуточно.
+        Загляните позже.</p>
+    <p>Задачу можно поставить прямо сейчас через бота в Telegram: он принимает
+        её и запускает, как только машина проснётся.</p>
+</div>
+</body>
+</html>
+HTML
+echo "готово: /var/www/transcribot/asleep.html"
+
 say "проверка DNS"
 RESOLVED=$(getent hosts "$DOMAIN" | awk '{print $1}' | head -1 || true)
 MYIP=$(curl -s --max-time 10 https://api.ipify.org || echo "?")
