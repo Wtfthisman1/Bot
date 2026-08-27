@@ -91,6 +91,10 @@ public class OllamaModel implements LanguageModel {
         // Ответ нужен целиком: показывать его по мере набора некому — человек
         // в это время уже ушёл со страницы
         request.put("stream", false);
+        // Думающие модели (qwen3 и подобные) иначе сначала рассуждают вслух —
+        // на пересказе это лишние минуты счёта и ничего сверх. Моделям, которые
+        // так не умеют, флаг безобиден: Ollama его просто игнорирует
+        request.put("think", false);
         request.put("keep_alive", keepAlive.toSeconds() + "s");
         request.put("options", Map.of(
                 "num_ctx", contextTokens,
