@@ -108,7 +108,7 @@ class InsightServiceTest {
     @Test
     void topicFoundInOnePieceIsReturnedAsIs() {
         transcript(longReplies(12));
-        fake.answers = prompt -> prompt.contains("часть") || prompt.contains("(0:00")
+        fake.answers = prompt -> prompt.contains("идёт с 0:00")
                 ? "Про это говорят в [0:00]." : "НЕТ";
 
         String text = insights.compute(new InsightService.Order(1, jobId, InsightKind.TOPIC, null, "сроки"));

@@ -57,7 +57,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "admin.chat.id=",
         "cleanup.enabled=false",
         "management.server.port=-1",
-        "home.api.key=test-key"
+        "home.api.key=test-key",
+        // Прибито гвоздями: иначе тест смотрит на .env разработчика и на его
+        // машине с поднятой Ollama проверяет не то, что задумано
+        "insight.enabled=false"
 })
 class TranscriptPageIT {
 

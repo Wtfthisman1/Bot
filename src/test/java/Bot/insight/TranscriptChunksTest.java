@@ -30,7 +30,7 @@ class TranscriptChunksTest {
         assertThat(chunks.get(0).text())
                 .contains("[0:00] Привет.")
                 .contains("[0:02] И тебе привет.");
-        assertThat(chunks.get(0).range()).isEqualTo("0:00–0:05");
+        assertThat(chunks.get(0).range()).isEqualTo("0:00 до 0:05");
     }
 
     @Test

@@ -13,6 +13,11 @@ package Bot.insight;
  * записи. Кнопка на такую метку перематывала бы в никуда, поэтому она остаётся
  * просто текстом: пусть человек видит, что модель ошиблась, а не тычет в мёртвую
  * ссылку.</p>
+ *
+ * <p>Скобки модель иногда теряет и пишет время просто в начале строки — этого
+ * её не отучить ни одной формулировкой, проверено. Поэтому метка в начале строки
+ * принимается и без скобок. В середине предложения — только в скобках: «созвон
+ * в 14:30» это не место в записи, и кнопка там была бы вредна.</p>
  */
 import Bot.transcription.Timecode;
 
@@ -24,8 +29,13 @@ import java.util.regex.Pattern;
 
 public final class InsightText {
 
-    /** Метка времени в ответе: то, что стоит в квадратных скобках. */
-    private static final Pattern BRACKETED = Pattern.compile("\\[([^\\[\\]\n]{1,20})]");
+    /**
+     * Метка времени в ответе: в скобках где угодно или без скобок в начале строки
+     * (со списочным дефисом или без него).
+     */
+    private static final Pattern MARK = Pattern.compile(
+            "\\[([^\\[\\]\n]{1,20})]|^[ \t]*(?:[-–—*]\\s*)?((?:\\d{1,2}:)?\\d{1,2}:\\d{2})",
+            Pattern.MULTILINE);
 
     /**
      * Запас на конце: последняя реплика может обрываться раньше, чем звук,
@@ -42,15 +52,19 @@ public final class InsightText {
             return parts;
         }
 
-        Matcher matcher = BRACKETED.matcher(answer);
+        Matcher matcher = MARK.matcher(answer);
         int position = 0;
         while (matcher.find()) {
-            OptionalInt millis = Timecode.parse(matcher.group(1));
+            boolean bracketed = matcher.group(1) != null;
+            OptionalInt millis = Timecode.parse(bracketed ? matcher.group(1) : matcher.group(2));
             if (millis.isEmpty() || millis.getAsInt() > durationMs + TAIL_MS) {
                 continue;   // не время или время, которого в записи нет
             }
-            if (matcher.start() > position) {
-                parts.add(Part.text(answer.substring(position, matcher.start())));
+            // Дефис списка и отступ перед меткой — часть строки, а не метки:
+            // проглотив их, кнопка съела бы разметку списка
+            int start = bracketed ? matcher.start() : matcher.end() - matcher.group(2).length();
+            if (start > position) {
+                parts.add(Part.text(answer.substring(position, start)));
             }
             parts.add(Part.at(millis.getAsInt()));
             position = matcher.end();

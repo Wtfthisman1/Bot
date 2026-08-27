@@ -35,13 +35,17 @@ public final class Timecode {
      *
      * <p>Пусто, если это не время: разбирается то, что написала языковая модель,
      * и «[примерно тут]» в ответе — обычное дело.</p>
+     *
+     * <p>Метка, за которой идёт ещё что-то, читается по началу: «0:19-0:52» —
+     * это диапазон, и перематывать по нему надо к его началу. Модель ставит
+     * такие, сколько её ни проси об одной метке.</p>
      */
     public static OptionalInt parse(String text) {
         if (text == null) {
             return OptionalInt.empty();
         }
         Matcher matcher = CLOCK.matcher(text.strip());
-        if (!matcher.matches()) {
+        if (!matcher.lookingAt()) {
             return OptionalInt.empty();
         }
         int hours = matcher.group(1) == null ? 0 : Integer.parseInt(matcher.group(1));

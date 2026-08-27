@@ -35,6 +35,15 @@ class InsightTextTest {
         assertThat(parts.get(0).text()).isEqualTo("Об этом сказано в [1:12:40].");
     }
 
+    /** Диапазон вместо метки — перематываем к его началу. */
+    @Test
+    void aRangeSeeksToItsStart() {
+        List<InsightText.Part> parts = InsightText.parts("[0:19-0:52] Про нейропластичность.", HALF_HOUR);
+
+        assertThat(parts.get(0).seconds()).isEqualTo(19.0);
+        assertThat(parts.get(0).text()).isEqualTo("0:19");
+    }
+
     @Test
     void bracketsThatAreNotTimeAreLeftAlone() {
         List<InsightText.Part> parts = InsightText.parts("Ведущий [неразборчиво] продолжает.", HALF_HOUR);
@@ -49,6 +58,25 @@ class InsightTextTest {
 
         assertThat(parts.get(0).seconds()).isEqualTo(3723.0);
         assertThat(parts.get(0).text()).isEqualTo("1:02:03");
+    }
+
+    /** Скобки модель теряет и пишет время просто в начале строки — это тоже метка. */
+    @Test
+    void timeAtTheStartOfALineCountsWithoutBrackets() {
+        List<InsightText.Part> parts = InsightText.parts("- 2:15 Про сроки.\n3:40 Про деньги.", HALF_HOUR);
+
+        assertThat(parts).extracting(InsightText.Part::seconds)
+                .containsExactly(null, 135.0, null, 220.0, null);
+        assertThat(parts.get(0).text()).isEqualTo("- ");
+    }
+
+    /** А вот время посреди фразы — это время встречи, а не место в записи. */
+    @Test
+    void timeInsideASentenceIsNotASeekButton() {
+        List<InsightText.Part> parts = InsightText.parts("Договорились созвониться в 14:30.", HALF_HOUR);
+
+        assertThat(parts).hasSize(1);
+        assertThat(parts.get(0).seconds()).isNull();
     }
 
     @Test

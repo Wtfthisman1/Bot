@@ -89,9 +89,15 @@ public final class TranscriptChunks {
     /** Кусок разговора: текст с метками времени и границы этого куска. */
     public record Chunk(String text, int startMs, int endMs) {
 
-        /** Подпись «о чём этот кусок по времени» — она уходит модели при сведении. */
+        /**
+         * Границы куска по времени: «0:00 до 5:59».
+         *
+         * <p>Словом «до», а не через тире: тире модель принимает за образец и
+         * начинает ставить в ответе диапазоны — «[0:19-0:52]» вместо метки
+         * начала. Проверено на живой записи.</p>
+         */
         public String range() {
-            return Timecode.format(startMs) + "–" + Timecode.format(endMs);
+            return Timecode.format(startMs) + " до " + Timecode.format(endMs);
         }
     }
 }
