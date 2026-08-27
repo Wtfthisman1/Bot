@@ -13,7 +13,13 @@ package Bot.site;
  * страницы. Файл при этом никуда не копируется.</p>
  */
 import Bot.config.Profiles;
+import Bot.insight.InsightEntity;
+import Bot.insight.InsightKind;
+import Bot.insight.InsightService;
+import Bot.insight.InsightText;
 import Bot.processing.JobEntity;
+import Bot.processing.JobState;
+import Bot.transcription.Timecode;
 import Bot.transcription.Transcript;
 import Bot.transcription.TranscriptSegmentEntity;
 import Bot.transcription.TranscriptSegments;
@@ -39,6 +45,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -55,8 +63,13 @@ import java.util.UUID;
 @Slf4j
 public class TranscriptController {
 
+    /** Когда заказали обработку: у списка из нескольких иначе не разобрать порядок. */
+    private static final DateTimeFormatter WHEN =
+            DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault());
+
     private final JobHistory history;
     private final TranscriptSegments transcripts;
+    private final InsightService insights;
 
     @GetMapping("/{jobId}")
     public String page(@AuthenticationPrincipal AccountPrincipal principal,
@@ -73,6 +86,12 @@ public class TranscriptController {
         model.addAttribute("lines", linesOf(transcript));
         model.addAttribute("speakers", speakerFields(transcript));
         model.addAttribute("hasMedia", mediaOf(job) != null);
+        List<Insight> processed = insightsOf(job.getId(), transcript);
+        model.addAttribute("insightReady", insights.ready());
+        model.addAttribute("insights", processed);
+        // Пока что-то считается, страница просит браузер вернуться за ответом:
+        // человек заказал обработку и ждёт её здесь же
+        model.addAttribute("insightPending", processed.stream().anyMatch(Insight::pending));
         return "transcript";
     }
 
@@ -102,6 +121,45 @@ public class TranscriptController {
                 ? "Сохранено."
                 : "Сохранено, исправлено реплик: " + changed + ".");
         return "redirect:/cabinet/transcript/" + job.getId();
+    }
+
+    /**
+     * Заказ на обработку текста моделью.
+     *
+     * <p>Ответа здесь не будет: модель считает минутами, и держать всё это
+     * время http-запрос значило бы показывать человеку крутящийся браузер, а
+     * при закрытой вкладке — терять уже начатую работу. Заказ ложится в
+     * очередь, страница показывает «считается».</p>
+     */
+    @PostMapping("/{jobId}/insight")
+    public String order(@AuthenticationPrincipal AccountPrincipal principal,
+                        @PathVariable String jobId,
+                        @RequestParam InsightKind kind,
+                        @RequestParam(required = false) Integer ratio,
+                        @RequestParam(required = false) String topic,
+                        RedirectAttributes redirect) {
+        JobEntity job = mine(principal, jobId).orElse(null);
+        if (job == null) {
+            return "redirect:/cabinet";
+        }
+
+        Optional<String> refusal = insights.order(job.getId(), kind, ratio, topic);
+        redirect.addFlashAttribute(refusal.isPresent() ? "error" : "message",
+                refusal.orElse("Отправлено в обработку. Результат появится на этой странице."));
+        return "redirect:/cabinet/transcript/" + job.getId() + "#insights";
+    }
+
+    /** Убрать посчитанное: список обработок иначе растёт без конца. */
+    @PostMapping("/{jobId}/insight/{id}/delete")
+    public String forget(@AuthenticationPrincipal AccountPrincipal principal,
+                         @PathVariable String jobId,
+                         @PathVariable long id) {
+        JobEntity job = mine(principal, jobId).orElse(null);
+        if (job == null) {
+            return "redirect:/cabinet";
+        }
+        insights.forget(job.getId(), id);
+        return "redirect:/cabinet/transcript/" + job.getId() + "#insights";
     }
 
     /**
@@ -223,7 +281,7 @@ public class TranscriptController {
             String name = speaker != null && !speaker.equals(previous)
                     ? transcript.nameOf(speaker) : null;
             previous = speaker;
-            lines.add(new Line(segment.getId(), clock(segment.getStartMs()),
+            lines.add(new Line(segment.getId(), Timecode.format(segment.getStartMs()),
                     segment.getStartMs() / 1000.0, name, segment.getText(), segment.isEdited()));
         }
         return lines;
@@ -246,12 +304,45 @@ public class TranscriptController {
         return result;
     }
 
-    /** {@code 1:02:03} для длинных записей и {@code 2:03} для коротких. */
-    private static String clock(int millis) {
-        int seconds = millis / 1000;
-        return seconds >= 3600
-                ? String.format("%d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
-                : String.format("%d:%02d", seconds / 60, seconds % 60);
+    /**
+     * Обработки задачи в том виде, в каком их показывает страница.
+     *
+     * <p>Метки времени в ответе модели сверяются с длиной записи: выдуманное
+     * время кнопкой не становится (см. {@link InsightText}).</p>
+     */
+    private List<Insight> insightsOf(UUID jobId, Transcript transcript) {
+        int durationMs = transcript.segments().isEmpty()
+                ? 0
+                : transcript.segments().get(transcript.segments().size() - 1).getEndMs();
+
+        List<Insight> result = new ArrayList<>();
+        for (InsightEntity insight : insights.of(jobId)) {
+            result.add(new Insight(
+                    insight.getId(),
+                    titleOf(insight),
+                    stateOf(insight),
+                    insight.isPending(),
+                    insight.getState() == JobState.FAILED,
+                    InsightText.parts(insight.getText(), durationMs),
+                    insight.getError(),
+                    WHEN.format(insight.getCreatedAt())));
+        }
+        return result;
+    }
+
+    private static String titleOf(InsightEntity insight) {
+        return insight.getKind() == InsightKind.SUMMARY
+                ? "Выжимка: %d%% от текста".formatted(insight.getRatio())
+                : "По теме: «%s»".formatted(insight.getTopic());
+    }
+
+    private static String stateOf(InsightEntity insight) {
+        return switch (insight.getState()) {
+            case QUEUED -> "В очереди";
+            case RUNNING -> "Считается";
+            case DONE -> "Готово";
+            case FAILED -> "Не получилось";
+        };
     }
 
     /** Реплика, как её показывает страница. */
@@ -259,4 +350,14 @@ public class TranscriptController {
 
     /** Поле «как зовут этот голос». */
     public record Speaker(String label, String name) {}
+
+    /** Обработка текста, как её показывает страница. */
+    public record Insight(long id,
+                          String title,
+                          String state,
+                          boolean pending,
+                          boolean failed,
+                          List<InsightText.Part> parts,
+                          String error,
+                          String when) {}
 }

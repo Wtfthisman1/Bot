@@ -105,10 +105,7 @@ public class TranscriptSearch {
 
         /** {@code 1:02:03} у длинных записей, {@code 2:03} у коротких. */
         public String at() {
-            int seconds = startMs / 1000;
-            return seconds >= 3600
-                    ? String.format("%d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
-                    : String.format("%d:%02d", seconds / 60, seconds % 60);
+            return Timecode.format(startMs);
         }
     }
 

@@ -9,7 +9,11 @@ package Bot.site;
  */
 import Bot.account.AccountRepository;
 import Bot.account.AccountService;
+import Bot.insight.InsightEntity;
+import Bot.insight.InsightKind;
+import Bot.insight.InsightRepository;
 import Bot.owner.Owner;
+import Bot.processing.JobState;
 import Bot.processing.JobStore;
 import Bot.processing.ProcessingJob;
 import Bot.support.PostgresTestContainer;
@@ -66,6 +70,7 @@ class TranscriptPageIT {
     @Autowired JobStore jobs;
     @Autowired Bot.processing.JobRepository jobRepository;
     @Autowired TranscriptSegments segments;
+    @Autowired InsightRepository insightRepository;
 
     @TempDir Path dir;
 
@@ -83,6 +88,7 @@ class TranscriptPageIT {
 
     @AfterEach
     void clean() {
+        insightRepository.deleteAll();
         jobRepository.deleteAll();
         accountRepository.deleteAll();
     }
@@ -160,7 +166,71 @@ class TranscriptPageIT {
                 .andExpect(content().string(containsString("#t=6.0")));
     }
 
+    /**
+     * Модели может не быть вовсе — на чужой машине, без видеокарты, без Ollama.
+     *
+     * <p>Тогда страница про это честно говорит, а заказ вежливо отклоняется.
+     * Расшифровка при этом остаётся полностью рабочей.</p>
+     */
+    @Test
+    void withoutAModelThePageSaysSoAndTakesNoOrders() throws Exception {
+        UUID jobId = jobWithTranscript();
+
+        mvc.perform(get("/cabinet/transcript/" + jobId).session(session))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Языковая модель сейчас не отвечает")))
+                .andExpect(content().string(containsString("Сохранить правки")));
+
+        mvc.perform(post("/cabinet/transcript/" + jobId + "/insight").session(session).with(csrf())
+                        .param("kind", "SUMMARY")
+                        .param("ratio", "15"))
+                .andExpect(redirectedUrl("/cabinet/transcript/" + jobId + "#insights"));
+        assertThat(insightRepository.findByJobIdOrderByCreatedAtDesc(jobId)).isEmpty();
+    }
+
+    /** Метки времени в ответе модели должны стать кнопками перемотки. */
+    @Test
+    void readyInsightIsShownWithSeekButtons() throws Exception {
+        UUID jobId = jobWithTranscript();
+        insight(jobId, "Говорили о деменции [0:06]. А в [1:30:00] — ничего, записи столько нет.");
+
+        String page = mvc.perform(get("/cabinet/transcript/" + jobId).session(session))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(page)
+                .contains("data-seconds=\"6.0\"")
+                .contains("Говорили о деменции")
+                // Выдуманное время осталось текстом: кнопка вела бы в никуда
+                .contains("[1:30:00]");
+    }
+
+    @Test
+    void insightCanBeRemovedFromTheList() throws Exception {
+        UUID jobId = jobWithTranscript();
+        long id = insight(jobId, "Короткий пересказ.");
+
+        mvc.perform(post("/cabinet/transcript/" + jobId + "/insight/" + id + "/delete")
+                        .session(session).with(csrf()))
+                .andExpect(redirectedUrl("/cabinet/transcript/" + jobId + "#insights"));
+
+        assertThat(insightRepository.findById(id)).isEmpty();
+    }
+
     /* ───────── helpers ───────── */
+
+    /** Готовая обработка в базе — так, будто её только что посчитал воркер. */
+    private long insight(UUID jobId, String text) {
+        InsightEntity insight = new InsightEntity();
+        insight.setJobId(jobId);
+        insight.setKind(InsightKind.SUMMARY);
+        insight.setRatio(15);
+        insight.setState(JobState.DONE);
+        insight.setText(text);
+        insight.setModel("подставная");
+        insight.setCreatedAt(java.time.Instant.now());
+        return insightRepository.save(insight).getId();
+    }
 
     /** Задача с записью на диске и разметкой — как её оставляет Whisper. */
     private UUID jobWithTranscript() throws IOException {

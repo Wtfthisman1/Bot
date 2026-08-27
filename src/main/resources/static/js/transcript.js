@@ -6,16 +6,30 @@
   запасных путей: если скрипт не загрузился, страница остаётся рабочей.
 */
 (function () {
+    /*
+      Обработка текста считается на видеокарте минутами, а результат человек
+      ждёт на этой же странице. Перезагружаем её сами, пока что-то в работе.
+
+      Не перезагружаем, если человек начал править расшифровку: его правки
+      живут в форме и до сохранения нигде больше не записаны — перезагрузка
+      стёрла бы их. Тогда он увидит результат, когда сохранит правки.
+    */
+    const insights = document.getElementById('insights');
+    if (insights && insights.dataset.pending === 'true') {
+        let dirty = false;
+        document.addEventListener('input', () => { dirty = true; }, { once: true });
+        setInterval(() => { if (!dirty) location.reload(); }, 15000);
+    }
+
     const player = document.getElementById('player');
     if (!player) return;
 
     const lines = Array.from(document.querySelectorAll('.line'));
 
     // Клик по времени — перемотка. Полсекунды назад: whisper ставит начало
-    // реплики по первому звуку, и точное попадание срезает первый слог
-    lines.forEach(line => {
-        const at = line.querySelector('.at');
-        if (!at) return;
+    // реплики по первому звуку, и точное попадание срезает первый слог.
+    // Метки внутри выжимки — те же кнопки, поэтому берём их одним запросом
+    document.querySelectorAll('.at').forEach(at => {
         at.addEventListener('click', () => {
             player.currentTime = Math.max(0, parseFloat(at.dataset.seconds) - 0.5);
             player.play();

@@ -7,6 +7,7 @@
 <main class="page">
 
     <p th:if="${message}" class="ok" th:text="${message}">готово</p>
+    <p th:if="${error}" class="error" th:text="${error}">не вышло</p>
 
     <h1>Расшифровка</h1>
     <p class="lead source" th:text="${title}">источник</p>
@@ -65,6 +66,80 @@
             <a class="button ghost" th:href="@{/cabinet}">В кабинет</a>
         </div>
     </form>
+
+    <!--
+      Обработка текста моделью. Стоит после расшифровки, а не перед ней: сначала
+      человек видит, что распознано, и правит ошибки — модель считает уже
+      по исправленному.
+    -->
+    <section th:unless="${#lists.isEmpty(lines)}" id="insights" class="insights"
+             th:data-pending="${insightPending}">
+        <h2>Обработка текста</h2>
+
+        <p th:unless="${insightReady}" class="hint">Языковая модель сейчас не отвечает —
+            обработка недоступна. Расшифровка от этого не страдает: её можно читать,
+            править, искать по ней и скачивать.</p>
+
+        <div th:if="${insightReady}" class="orders">
+            <!--
+              Две кнопки — два разных вопроса. Первая отвечает «о чём это было»,
+              вторая — «что здесь говорили вот про это».
+            -->
+            <form class="order" method="post"
+                  th:action="@{/cabinet/transcript/{id}/insight(id=${jobId})}">
+                <input type="hidden" name="kind" value="SUMMARY">
+                <label>Пересказать примерно в
+                    <select name="ratio">
+                        <option value="5">5% от текста — только суть</option>
+                        <option value="15" selected>15% — коротко</option>
+                        <option value="30">30% — подробно</option>
+                    </select>
+                </label>
+                <button type="submit" class="button">Сделать выжимку</button>
+            </form>
+
+            <form class="order" method="post"
+                  th:action="@{/cabinet/transcript/{id}/insight(id=${jobId})}">
+                <input type="hidden" name="kind" value="TOPIC">
+                <label>Найти в записи всё про
+                    <input type="text" name="topic" maxlength="200"
+                           placeholder="например: сроки и деньги" required>
+                </label>
+                <button type="submit" class="button">Собрать по теме</button>
+            </form>
+            <p class="hint">Считает домашняя видеокарта — та же, что расшифровывает.
+                Час записи занимает несколько минут; страница обновится сама.</p>
+        </div>
+
+        <article th:each="insight : ${insights}" class="insight card">
+            <header>
+                <span class="what" th:text="${insight.title()}">Выжимка</span>
+                <span class="state" th:classappend="${insight.failed()} ? 'bad' : ''"
+                      th:text="${insight.state()}">Готово</span>
+                <span class="when" th:text="${insight.when()}">27.08 12:00</span>
+                <!--
+                  Форма, а не ссылка: удаление по GET однажды сделает за человека
+                  предзагрузка ссылок в браузере.
+                -->
+                <form method="post" class="drop"
+                      th:action="@{/cabinet/transcript/{id}/insight/{n}/delete(id=${jobId},n=${insight.id()})}">
+                    <button type="submit" title="Убрать">×</button>
+                </form>
+            </header>
+
+            <p th:if="${insight.pending()}" class="hint">Модель считает. Это минуты,
+                а если сейчас идёт расшифровка — то после неё: видеокарта одна.</p>
+            <p th:if="${insight.failed()}" class="error" th:text="${insight.error()}">ошибка</p>
+
+            <p class="body" th:if="${not #lists.isEmpty(insight.parts())}">
+                <th:block th:each="part : ${insight.parts()}">
+                    <span th:if="${part.seconds() == null}" th:text="${part.text()}">текст</span>
+                    <button th:unless="${part.seconds() == null}" type="button" class="at inline"
+                            th:text="${part.text()}" th:data-seconds="${part.seconds()}">0:00</button>
+                </th:block>
+            </p>
+        </article>
+    </section>
 
     <section th:unless="${#lists.isEmpty(lines)}" class="exports">
         <h2>Скачать</h2>
