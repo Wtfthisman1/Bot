@@ -105,9 +105,18 @@
         <h2>История</h2>
 
         <form method="get" th:action="@{/cabinet/search}" class="inline-search">
-            <input type="search" name="q" placeholder="Поиск по расшифровкам">
+            <input type="search" name="q" placeholder="Поиск по всем расшифровкам: слово или фраза">
             <button type="submit" class="button ghost">Найти</button>
         </form>
+
+        <!--
+          Что «Открыть» вообще открывает, по названию не догадаться, а внутри —
+          всё главное: и правка, и обработка моделью. Без этой строки кнопки
+          выжимки в кабинете будто нет вовсе.
+        -->
+        <p th:unless="${#lists.isEmpty(jobs)}" class="hint">«Открыть» — чтение вместе
+            с записью, правка текста и имён голосов. «Выжимка» ведёт туда же, сразу
+            к обработке моделью: пересказ записи или разбор по заданной теме.</p>
 
         <p th:if="${#lists.isEmpty(jobs)}" class="empty">
             Пока пусто. Поставьте первую задачу — она появится здесь.
@@ -149,6 +158,8 @@
                     -->
                     <a th:if="${not #lists.isEmpty(job.formats())}" class="chip open"
                        th:href="@{/cabinet/transcript/{id}(id=${job.id()})}">Открыть</a>
+                    <a th:if="${not #lists.isEmpty(job.formats())}" class="chip insight"
+                       th:href="@{/cabinet/transcript/{id}(id=${job.id()})} + '#insights'">✨ Выжимка</a>
                     <a th:each="format : ${job.formats()}"
                        th:href="@{/cabinet/files/{id}/{format}(id=${job.id()}, format=${format})}"
                        th:switch="${format}" class="chip">

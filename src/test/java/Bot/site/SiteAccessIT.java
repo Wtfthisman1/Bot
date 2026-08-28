@@ -26,6 +26,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
@@ -64,6 +65,8 @@ class SiteAccessIT {
         accountRepository.deleteAll();
     }
 
+    @org.junit.jupiter.api.io.TempDir Path tmp;
+
     @Test
     void cabinetIsClosedToStrangers() throws Exception {
         mvc.perform(get("/cabinet"))
@@ -84,6 +87,32 @@ class SiteAccessIT {
         mvc.perform(get("/cabinet").session(session(login)))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Мои задачи")));
+    }
+
+    /**
+     * В строке готовой расшифровки есть путь и к чтению, и к обработке моделью.
+     *
+     * <p>Заодно единственная проверка самого шаблона строки: выражения
+     * Thymeleaf компилятор не видит, и опечатка в ссылке вылезала бы только у
+     * человека с непустой историей — то есть у всех, кроме тестов.</p>
+     */
+    @Test
+    void finishedJobOffersReadingAndInsights() throws Exception {
+        AccountService.Account account = accounts.register(EMAIL, PASSWORD, "Аня");
+        MvcResult login = mvc.perform(post("/login").with(csrf())
+                .param("email", EMAIL)
+                .param("password", PASSWORD)).andReturn();
+
+        Path txt = Files.writeString(tmp.resolve("лекция.txt"), "расшифровка");
+        ProcessingJob job = jobs.enqueue(ProcessingJob.newFile(
+                Owner.account(account.id().toString()), tmp.resolve("лекция.m4a")));
+        jobs.claim();
+        jobs.complete(job.id(), txt);
+
+        mvc.perform(get("/cabinet").session(session(login)))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "/cabinet/transcript/" + job.id() + "#insights")));
     }
 
     @Test

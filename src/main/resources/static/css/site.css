@@ -250,6 +250,8 @@ td { padding: 12px 10px; border-top: 1px solid var(--line); vertical-align: top;
 .at:hover { color: var(--accent); }
 
 .chip.open { border-color: var(--accent); color: var(--accent); }
+/* Обработка моделью — вторая по важности после чтения, но не главная */
+.chip.insight { border-color: var(--line); }
 
 /*
   «Остановить» стоит в одном ряду со ссылками на файлы, поэтому и выглядит
