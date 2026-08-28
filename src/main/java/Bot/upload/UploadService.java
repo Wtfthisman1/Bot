@@ -99,6 +99,18 @@ public class UploadService implements InitializingBean {
         return info.owner();
     }
 
+    /**
+     * Жив ли токен — без гашения.
+     *
+     * <p>Нужна перед показом формы: ссылка одноразовая, и открытая повторно
+     * форма выглядела бы рабочей, а отвечала бы отказом уже после того, как
+     * человек выбрал файл и дождался конца загрузки.</p>
+     */
+    public boolean isLive(String token) {
+        TokenInfo info = tokens.get(token);
+        return info != null && info.expireTime().isAfter(Instant.now());
+    }
+
     /** Периодически чистим просроченные токены, чтобы Map не разрасталась. */
     @Scheduled(fixedRate = 30 * 60 * 1000)   // каждые 30 мин
     void purgeExpired() {

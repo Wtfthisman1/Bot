@@ -7,6 +7,8 @@ import Bot.owner.Owner;
 import Bot.processing.JobStore;
 import Bot.processing.ProcessingJob;
 import Bot.service.StorageManager;
+import Bot.telegram.Keyboards;
+import Bot.telegram.MessageSender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
@@ -45,16 +47,30 @@ public class UploadController {
     private final JobStore       jobStore;
     private final StorageManager storageManager;
     private final QuotaService   quotas;
+    private final MessageSender  messageSender;
 
 
     /* ---------- отдаём форму ---------- */
+
+    /**
+     * Форма — или объяснение, почему её больше нет.
+     *
+     * <p>Токен проверяется до показа: ссылка одноразовая, и живая на вид форма
+     * провоцирует выбрать файл и дождаться конца загрузки, чтобы получить отказ
+     * в самом конце. Токен здесь только проверяется, но не гасится — иначе
+     * форму нельзя было бы даже открыть.</p>
+     */
     @GetMapping(value = "/{token}", produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<Resource> uploadForm(@PathVariable String token) {
+        if (!uploadService.isLive(token)) {
+            log.info("Открыта недействительная ссылка на форму загрузки");
+            return ResponseEntity.status(HttpStatus.GONE)
+                    .body(new ClassPathResource("static/upload-expired.html"));
+        }
+
         log.info("Открыта форма загрузки по токену");
         // upload.html лежит в src/main/resources/static/
-        Resource html = new ClassPathResource("static/upload.html");
-        // Если хотите проверять/блокировать токен до показа формы — сделайте это здесь.
-        return ResponseEntity.ok(html);
+        return ResponseEntity.ok(new ClassPathResource("static/upload.html"));
     }
 
     @PostMapping(value = "/{token}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -119,6 +135,33 @@ public class UploadController {
         }
 
         log.info("Принято от {}: {} файлов, {} ссылок", owner, fileCount, urlCount);
+        tellOwner(owner, fileCount, urlCount);
         return ResponseEntity.ok("Принято! Задачи поставлены в очередь.");
+    }
+
+    /**
+     * Говорит в чат, что файл принят.
+     *
+     * <p>Форму открывают из бота и возвращаются в него же; без этого сообщения
+     * человек, закрыв вкладку, не имеет никаких признаков, что работа пошла, —
+     * а до готовой расшифровки могут пройти минуты.</p>
+     *
+     * <p>У аккаунта сайта чата нет: ему о принятом говорит сама страница.</p>
+     */
+    private void tellOwner(Owner owner, int fileCount, int urlCount) {
+        if (!owner.isTelegram()) {
+            return;
+        }
+        StringBuilder text = new StringBuilder("📥 Принято через форму: ");
+        if (fileCount > 0) {
+            text.append("файлов — ").append(fileCount);
+        }
+        if (urlCount > 0) {
+            text.append(fileCount > 0 ? ", " : "").append("ссылок — ").append(urlCount);
+        }
+        text.append(".\n\nЗадачи в очереди, расшифровка придёт сюда. "
+                + "Ссылка на форму больше не действует — за новой нажмите «Загрузить файлы».");
+        messageSender.sendMessageWithKeyboard(owner.telegramChatId(), text.toString(),
+                null, Keyboards.mainMenu());
     }
 }

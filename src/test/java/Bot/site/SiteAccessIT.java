@@ -103,9 +103,16 @@ class SiteAccessIT {
         mvc.perform(get("/download/bogus")).andExpect(status().isNotFound());
     }
 
+    /**
+     * Форма открыта снаружи: вход её не сторожит.
+     *
+     * <p>410, а не 200, потому что токен выдуманный: сработавшая или
+     * просроченная ссылка показывает объяснение вместо формы. Важно здесь то,
+     * что ответ пришёл от самой формы, а не от входа на сайт.</p>
+     */
     @Test
     void uploadFormStaysOpen() throws Exception {
-        mvc.perform(get("/upload/BOGUS1")).andExpect(status().isOk());
+        mvc.perform(get("/upload/BOGUS1")).andExpect(status().isGone());
     }
 
     /** Чужая задача выглядит ровно как несуществующая. */

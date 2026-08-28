@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!--
+  Страница вместо формы, когда ссылка уже сработала или просрочена.
+
+  Отдельная страница, а не отказ поверх формы: живая на вид форма провоцирует
+  выбрать файл и ждать конца загрузки, чтобы в конце получить 403. Здесь сразу
+  видно, что делать дальше.
+-->
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ссылка недействительна</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #2d3748;
+    }
+    .card {
+      max-width: 460px;
+      margin: 24px;
+      padding: 40px;
+      border-radius: 24px;
+      background: #fff;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .2);
+      text-align: center;
+    }
+    h1 { margin: 0 0 16px; font-size: 24px; }
+    p { margin: 0 0 12px; line-height: 1.5; color: #4a5568; }
+    .quiet { color: #718096; font-size: 14px; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>🕓 Ссылка уже недействительна</h1>
+  <p>Ссылка на форму одноразовая и живёт час. Эта уже сработала или просрочена.</p>
+  <p>Попросите новую в чате: кнопка <b>«Загрузить файлы»</b>.</p>
+  <p class="quiet">Если вы только что отправили файл — всё в порядке, он принят.
+     Расшифровка придёт в чат, повторять отправку не нужно.</p>
+</div>
+</body>
+</html>

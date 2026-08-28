@@ -581,14 +581,24 @@
       slots.forEach(r => r.querySelector('[data-bar]').style.width = '100%');
       
       if (xhr.status === 200) {
-        showStatus('Файлы успешно загружены! Обработка началась.', 'success');
+        // Страницу не перезагружаем: ссылка одноразовая, и обновлённая форма
+        // выглядела бы рабочей, а на первой же отправке отвечала 403 —
+        // человек видел бы ошибку сразу после успеха
+        showStatus('Принято! Расшифровка придёт в чат. Эту страницу можно закрыть.', 'success');
         updateDebugInfo('✅ Успешно отправлено!');
-        setTimeout(() => location.reload(), 2000);
-      } else {
-        showStatus('Ошибка загрузки: ' + (xhr.responseText || 'Неизвестная ошибка'), 'error');
-        updateDebugInfo('❌ Ошибка: ' + xhr.status);
+        finish('Отправлено');
+        return;
       }
-      
+
+      showStatus(xhr.status === 403
+        ? 'Ссылка уже использована. Попросите у бота новую — «Загрузить файлы».'
+        : 'Ошибка загрузки: ' + (xhr.responseText || 'Неизвестная ошибка'), 'error');
+      updateDebugInfo('❌ Ошибка: ' + xhr.status);
+
+      if (xhr.status === 403) {
+        finish('Ссылка недействительна');
+        return;
+      }
       btn.classList.remove('loading');
       btnText.textContent = 'Отправить файлы';
     };
@@ -604,6 +614,20 @@
     xhr.open('POST', actionUrl);
     xhr.send(form);
   });
+
+  /**
+   * Конец работы формы: отправлять по этой ссылке больше нечего.
+   *
+   * Кнопка не просто гаснет, а меняет подпись: серая кнопка без объяснения
+   * читается как поломка, а не как «всё уже сделано».
+   */
+  function finish(label) {
+    const btn = document.getElementById('sendBtn');
+    const btnText = btn.querySelector('.btn-text');
+    btn.classList.remove('loading');
+    btn.disabled = true;
+    btnText.textContent = label;
+  }
 
   function showStatus(message, type) {
     const status = document.getElementById('status');
