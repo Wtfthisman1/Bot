@@ -33,14 +33,24 @@
         <section th:if="${not #lists.isEmpty(speakers)}" class="speakers card">
             <h2>Голоса</h2>
             <p class="hint">Диаризация различила голоса, но не знает имён.
-                Назовите их — имена подставятся во всю расшифровку и в субтитры.</p>
+                Назовите их — имена подставятся во всю расшифровку и в субтитры.
+                Номер у голоса — по порядку появления в записи.</p>
+            <!--
+              Вместо метки диаризации (SPEAKER_06) — место, где голос впервые
+              звучит, и первая фраза: по метке узнать человека невозможно, а её
+              номер вдобавок не совпадает с номером спикера и выглядит ошибкой.
+            -->
             <div th:each="speaker : ${speakers}" class="speaker">
                 <input type="hidden" name="speakerLabel" th:value="${speaker.label()}">
                 <label>
-                    <span th:text="${speaker.label()}">SPEAKER_00</span>
                     <input type="text" name="speakerName" th:value="${speaker.name()}"
                            maxlength="60" placeholder="Ведущий">
                 </label>
+                <p class="sample">
+                    <button type="button" class="at" th:if="${speaker.at()}"
+                            th:text="${speaker.at()}" th:data-seconds="${speaker.seconds()}">0:00</button>
+                    <span th:if="${speaker.sample()}" th:text="'«' + ${speaker.sample()} + '»'">реплика</span>
+                </p>
             </div>
         </section>
 

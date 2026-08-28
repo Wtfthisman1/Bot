@@ -51,6 +51,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -70,6 +71,9 @@ public class TranscriptController {
     private final JobHistory history;
     private final TranscriptSegments transcripts;
     private final InsightService insights;
+
+    /** Сколько знаков первой фразы показываем рядом с голосом. */
+    private static final int SAMPLE_LIMIT = 70;
 
     @GetMapping("/{jobId}")
     public String page(@AuthenticationPrincipal AccountPrincipal principal,
@@ -287,10 +291,42 @@ public class TranscriptController {
         return lines;
     }
 
+    /**
+     * Голоса для формы: имя, время первой реплики и она сама.
+     *
+     * <p>Метка диаризации человеку ничего не говорит и вдобавок сбивает с толку:
+     * рядом с «Спикером 1» стоит SPEAKER_06, и это выглядит ошибкой нумерации.
+     * На самом деле номер — по порядку появления в записи, а метка — внутренний
+     * номер модели, и совпадать они не обязаны. Чтобы голос можно было узнать,
+     * показываем не метку, а место, где он впервые звучит, и первую фразу.</p>
+     */
     private static List<Speaker> speakerFields(Transcript transcript) {
+        Map<String, TranscriptSegmentEntity> first = new LinkedHashMap<>();
+        for (TranscriptSegmentEntity segment : transcript.segments()) {
+            if (segment.getSpeaker() != null) {
+                first.putIfAbsent(segment.getSpeaker(), segment);
+            }
+        }
+
         List<Speaker> fields = new ArrayList<>();
-        transcript.speakers().forEach((label, name) -> fields.add(new Speaker(label, name)));
+        transcript.speakers().forEach((label, name) -> {
+            TranscriptSegmentEntity segment = first.get(label);
+            fields.add(new Speaker(label, name,
+                    segment == null ? null : Timecode.format(segment.getStartMs()),
+                    segment == null ? 0 : segment.getStartMs() / 1000.0,
+                    segment == null ? null : sample(segment.getText())));
+        });
         return fields;
+    }
+
+    /** Первая фраза целиком в строку не влезет — обрезаем по границе слова. */
+    private static String sample(String text) {
+        String clean = text == null ? "" : text.strip();
+        if (clean.length() <= SAMPLE_LIMIT) {
+            return clean;
+        }
+        int cut = clean.lastIndexOf(' ', SAMPLE_LIMIT);
+        return clean.substring(0, cut > SAMPLE_LIMIT / 2 ? cut : SAMPLE_LIMIT) + "…";
     }
 
     private static Map<String, String> pairs(List<String> labels, List<String> names) {
@@ -351,7 +387,8 @@ public class TranscriptController {
     public record Line(Long id, String at, double seconds, String speaker, String text, boolean edited) {}
 
     /** Поле «как зовут этот голос». */
-    public record Speaker(String label, String name) {}
+    /** Голос в форме: метка для сохранения, имя и приметы, по которым его узнают. */
+    public record Speaker(String label, String name, String at, double seconds, String sample) {}
 
     /** Обработка текста, как её показывает страница. */
     public record Insight(long id,

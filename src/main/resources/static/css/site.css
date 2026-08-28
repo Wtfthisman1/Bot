@@ -198,9 +198,24 @@ td { padding: 12px 10px; border-top: 1px solid var(--line); vertical-align: top;
     z-index: 1;
 }
 
-.speakers .speaker { margin: 8px 0; }
+.speakers .speaker { margin: 14px 0; }
 .speakers label { flex-direction: row; align-items: center; gap: 10px; }
-.speakers label span { color: var(--dim); font-family: ui-monospace, monospace; font-size: 13px; }
+
+/*
+  Первая фраза голоса — подпись под полем имени: по ней человека и узнают.
+  Приглушённая и в одну строку, чтобы список голосов оставался списком.
+*/
+.speakers .sample {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 4px 0 0;
+    color: var(--dim);
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 .lines { margin: 20px 0; }
 .line { padding: 4px 0; }
@@ -250,7 +265,6 @@ form.inline { display: inline; }
     font-size: 13px;
     cursor: pointer;
 }
-
 
 /* ── поиск ── */
 
