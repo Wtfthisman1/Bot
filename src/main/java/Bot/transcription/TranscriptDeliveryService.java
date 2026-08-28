@@ -4,7 +4,7 @@ package Bot.transcription;
  * Выдача готовой расшифровки пользователю во всех форматах.
  *
  * <p>Ответственность: отправить текст сразу после транскрипции и добавить под
- * ним кнопки — субтитры и Word. Один проход Whisper уже кладёт {@code .srt},
+ * ним кнопки — субтитры, Word и выжимку. Один проход Whisper уже кладёт {@code .srt},
  * {@code .vtt}, {@code .json} и {@code .tsv} рядом с текстом, так что субтитры
  * достаются без единой лишней секунды на видеокарте; отдать их — вопрос одной
  * кнопки. Связан с {@link JobStore} (по задаче находится сама расшифровка),
@@ -13,9 +13,11 @@ package Bot.transcription;
  *
  * <p>Кнопки предлагаются только для форматов, которые реально лежат на диске:
  * расшифровки, сделанные до появления субтитров, соседних файлов не имеют, и
- * обещать их кнопкой значило бы врать.</p>
+ * обещать их кнопкой значило бы врать. По той же причине выжимка появляется,
+ * только когда языковая модель и правда отвечает.</p>
  */
 import Bot.config.Profiles;
+import Bot.insight.InsightService;
 import Bot.owner.Owner;
 import Bot.processing.JobStore;
 import Bot.telegram.Keyboards;
@@ -45,6 +47,7 @@ public class TranscriptDeliveryService {
     private final JobStore jobStore;
     private final WordExporter wordExporter;
     private final MessageSender messageSender;
+    private final InsightService insights;
 
     /**
      * Отправляет текст расшифровки и кнопки с остальными форматами.
@@ -53,17 +56,18 @@ public class TranscriptDeliveryService {
      */
     public void deliver(UUID jobId, long chatId, Path txt) {
         List<TranscriptFormat> available = availableFormats(txt);
+        boolean summary = insights.ready();
 
-        if (available.isEmpty()) {
-            // Ни субтитров, ни возможности собрать Word — отправляем как раньше
+        if (available.isEmpty() && !summary) {
+            // Ни субтитров, ни Word, ни модели — отправляем как раньше
             messageSender.sendTranscript(chatId, txt, null);
             return;
         }
 
-        log.info("Расшифровка отправлена: chatId={}, jobId={}, доступно форматов={}",
-                chatId, jobId, available.size());
+        log.info("Расшифровка отправлена: chatId={}, jobId={}, доступно форматов={}, выжимка={}",
+                chatId, jobId, available.size(), summary);
         messageSender.sendTranscript(chatId, txt,
-                Keyboards.transcriptFormats(jobId.toString(), available));
+                Keyboards.underTranscript(jobId.toString(), available, summary));
     }
 
     /**

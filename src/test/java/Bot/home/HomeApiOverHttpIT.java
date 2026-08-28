@@ -17,6 +17,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -67,6 +69,19 @@ class HomeApiOverHttpIT {
         assertThatThrownBy(() -> client("not-the-key").transcribeLink(OWNER, "https://vimeo.com/1"))
                 .isInstanceOf(RestClientResponseException.class)
                 .hasMessageContaining("403");
+    }
+
+    /**
+     * Заказ выжимки по чужой задаче: дом отказывает словами, а не пятисоткой.
+     *
+     * <p>Проверяется весь провод: тело запроса, адрес и обратный путь отказа.
+     * Задача здесь заведомо не наша — выдуманный id, — и это единственный
+     * отказ, который виден без живой модели.</p>
+     */
+    @Test
+    void summaryOfAForeignJobIsRefusedInWords() {
+        assertThat(client("test-key").summarize(OWNER, UUID.randomUUID().toString()))
+                .get().asString().contains("недоступна");
     }
 
     /** Дом выключен: клиент обязан назвать это своим именем, а не общей ошибкой. */

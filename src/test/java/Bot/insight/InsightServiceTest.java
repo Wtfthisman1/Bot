@@ -75,7 +75,8 @@ class InsightServiceTest {
     void shortTranscriptIsRetoldInOneQuestion() {
         transcript("Раз.", "Два.", "Три.");
 
-        String text = insights.compute(new InsightService.Order(1, jobId, InsightKind.SUMMARY, 15, null));
+        String text = insights.compute(
+                new InsightService.Order(1, jobId, InsightKind.SUMMARY, 15, null, null));
 
         assertThat(fake.prompts).hasSize(1);
         assertThat(fake.prompts.get(0)).contains("[0:00] Раз.").contains("[0:20] Три.");
@@ -87,7 +88,7 @@ class InsightServiceTest {
     void longTranscriptIsAskedInPiecesAndThenPutTogether() {
         transcript(longReplies(12));
 
-        insights.compute(new InsightService.Order(1, jobId, InsightKind.SUMMARY, 15, null));
+        insights.compute(new InsightService.Order(1, jobId, InsightKind.SUMMARY, 15, null, null));
 
         // Последний вопрос — сведение: в нём уже не расшифровка, а ответы по кускам
         assertThat(fake.prompts).hasSizeGreaterThan(2);
@@ -100,7 +101,8 @@ class InsightServiceTest {
     void theAskedLengthIsSpelledOutInWords() {
         transcript("Раз два три четыре пять.");   // половина от пяти слов — это не пересказ
 
-        insights.compute(new InsightService.Order(1, jobId, InsightKind.SUMMARY, 50, null));
+        insights.compute(
+                new InsightService.Order(1, jobId, InsightKind.SUMMARY, 50, null, null));
 
         assertThat(fake.prompts.get(0)).contains("60 слов");   // ниже этого не опускаемся
     }
@@ -111,7 +113,8 @@ class InsightServiceTest {
         fake.answers = prompt -> prompt.contains("идёт с 0:00")
                 ? "Про это говорят в [0:00]." : "НЕТ";
 
-        String text = insights.compute(new InsightService.Order(1, jobId, InsightKind.TOPIC, null, "сроки"));
+        String text = insights.compute(
+                new InsightService.Order(1, jobId, InsightKind.TOPIC, null, "сроки", null));
 
         assertThat(text).isEqualTo("Про это говорят в [0:00].");
     }
@@ -122,7 +125,8 @@ class InsightServiceTest {
         transcript("Раз.", "Два.");
         fake.answers = prompt -> "НЕТ.";
 
-        String text = insights.compute(new InsightService.Order(1, jobId, InsightKind.TOPIC, null, "сроки"));
+        String text = insights.compute(
+                new InsightService.Order(1, jobId, InsightKind.TOPIC, null, "сроки", null));
 
         assertThat(text).isEqualTo("Про «сроки» в этой записи ничего не нашлось.");
     }
@@ -172,6 +176,29 @@ class InsightServiceTest {
         assertThat(second).isEmpty();
         assertThat(insightRepository.findById(first.get().id()))
                 .get().extracting(InsightEntity::getState).isEqualTo(JobState.RUNNING);
+    }
+
+    /**
+     * Заказ из чата помнит, куда отвечать: страницы, которая показала бы
+     * посчитанное, у Telegram нет.
+     */
+    @Test
+    void orderFromChatRemembersWhereToAnswer() {
+        transcript("Раз.", "Два.");
+        insights.order(jobId, InsightKind.SUMMARY, null, null, 77L);
+
+        assertThat(insights.claim()).get()
+                .extracting(InsightService.Order::notifyChatId).isEqualTo(77L);
+    }
+
+    /** Заказ со страницы в чат не уходит: там его показывать некому и незачем. */
+    @Test
+    void orderFromPageHasNoChat() {
+        transcript("Раз.", "Два.");
+        insights.order(jobId, InsightKind.SUMMARY, 15, null);
+
+        assertThat(insights.claim()).get()
+                .extracting(InsightService.Order::notifyChatId).isNull();
     }
 
     /** Прерванное перезапуском возвращается в очередь: тот воркер уже не вернётся. */

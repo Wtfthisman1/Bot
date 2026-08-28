@@ -39,6 +39,15 @@ public final class Keyboards {
     public static final String CB_TRANSCRIPT_PREFIX = "tr:";
 
     /**
+     * Кнопка «Выжимка» под готовой расшифровкой: {@code sum:<id расшифровки>}.
+     *
+     * <p>Отдельный префикс, а не ещё один формат: форматы отдают уже готовый
+     * файл, а здесь заказывается счёт на видеокарте, и ответ придёт отдельным
+     * сообщением через несколько минут.</p>
+     */
+    public static final String CB_SUMMARY_PREFIX = "sum:";
+
+    /**
      * Подтверждение входа на сайт: {@code login:yes:<код>} и {@code login:no:<код>}.
      *
      * <p>Код — 22 символа, вместе с префиксом это 32 байта: лимит Telegram
@@ -73,13 +82,20 @@ public final class Keyboards {
     }
 
     /**
-     * Форматы, в которых можно забрать уже присланную расшифровку.
+     * Что можно сделать с уже присланной расшифровкой: забрать в другом формате
+     * или попросить выжимку.
      *
      * <p>Кнопками, а не четырьмя файлами подряд: субтитры и Word нужны не
      * каждому, а засыпать чат вложениями после каждой транскрипции — плохой
      * обмен ради редкого случая.</p>
+     *
+     * <p>Выжимка идёт отдельным рядом, ниже форматов: это единственная кнопка,
+     * которая не отдаёт готовое, а занимает видеокарту на минуты.</p>
+     *
+     * @param summary показывать ли выжимку — модели может не быть вовсе
      */
-    public static InlineKeyboardMarkup transcriptFormats(String id, List<TranscriptFormat> formats) {
+    public static InlineKeyboardMarkup underTranscript(String id, List<TranscriptFormat> formats,
+                                                       boolean summary) {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         // По две кнопки в ряд: подписи длинные, в один ряд Telegram их сожмёт
         for (int i = 0; i < formats.size(); i += 2) {
@@ -89,6 +105,9 @@ public final class Keyboards {
                 row.add(button(format.buttonLabel(), transcriptCallback(format, id)));
             }
             rows.add(row);
+        }
+        if (summary) {
+            rows.add(List.of(button("✨ Выжимка", CB_SUMMARY_PREFIX + id)));
         }
 
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup();

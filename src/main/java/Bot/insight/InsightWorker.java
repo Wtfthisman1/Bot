@@ -15,6 +15,10 @@ package Bot.insight;
  *
  * <p>После работы веса выгружаются немедленно: чужая задача не должна ждать,
  * пока истечёт {@code keep_alive} модели, которой уже никто не пользуется.</p>
+ *
+ * <p>Заказ из чата воркер и отвечает — через {@link InsightDelivery}. Иначе
+ * посчитанное осталось бы лежать в базе: страницы, которая его показала бы,
+ * у Telegram нет.</p>
  */
 import Bot.config.Profiles;
 import Bot.processing.GpuLock;
@@ -40,6 +44,7 @@ public class InsightWorker {
     private long pollIntervalMs;
 
     private final InsightService insights;
+    private final InsightDelivery delivery;
     private final GpuLock gpu;
 
     private volatile boolean running = true;
@@ -87,7 +92,8 @@ public class InsightWorker {
         log.info("Обработка текста: воркер остановлен");
     }
 
-    private void process(InsightService.Order order) throws InterruptedException {
+    /** Пакетная видимость ради проверки доставки: снаружи зовёт только цикл. */
+    void process(InsightService.Order order) throws InterruptedException {
         MDC.put("jobId", order.jobId().toString().substring(0, 8));
         long startedAt = System.currentTimeMillis();
         gpu.acquire("обработка текста");
@@ -96,14 +102,35 @@ public class InsightWorker {
             insights.complete(order.id(), text);
             log.info("Обработка готова за {} с: вид={}",
                     (System.currentTimeMillis() - startedAt) / 1000, order.kind());
+            answer(order, () -> delivery.ready(order.notifyChatId(), order.kind(), text));
         } catch (Exception e) {
             log.error("Не удалось обработать расшифровку: вид={}", order.kind(), e);
-            insights.fail(order.id(), "Модель не справилась с этим текстом. Попробуйте ещё раз.");
+            String error = "Модель не справилась с этим текстом. Попробуйте ещё раз.";
+            insights.fail(order.id(), error);
+            answer(order, () -> delivery.failed(order.notifyChatId(), order.kind(), error));
         } finally {
             // Даже если счёт сорвался, веса уже могли загрузиться в память
             insights.unloadModel();
             gpu.release();
             MDC.remove("jobId");
+        }
+    }
+
+    /**
+     * Отвечает в чат, если заказ пришёл оттуда.
+     *
+     * <p>Сбой отправки не должен ронять обработку: посчитанное уже лежит в
+     * базе, а не отправленное сообщение — потеря куда меньшая, чем потерянный
+     * пропуск на видеокарту, который освобождается ниже, в {@code finally}.</p>
+     */
+    private void answer(InsightService.Order order, Runnable send) {
+        if (order.notifyChatId() == null) {
+            return;
+        }
+        try {
+            send.run();
+        } catch (Exception e) {
+            log.error("Не удалось отправить обработку в чат: chatId={}", order.notifyChatId(), e);
         }
     }
 

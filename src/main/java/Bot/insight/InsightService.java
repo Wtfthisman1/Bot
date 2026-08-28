@@ -3,10 +3,11 @@ package Bot.insight;
 /**
  * Обработка расшифровки языковой моделью: заказы и сам счёт.
  *
- * <p>Ответственность: принять заказ со страницы, сложить его в очередь и —
- * когда до него дойдут руки у {@link InsightWorker} — сходить в модель нужное
- * число раз и вернуть текст. Проверка «моя ли это задача» сюда не заходит: она
- * живёт там же, где для остального кабинета, в {@code JobHistory}.</p>
+ * <p>Ответственность: принять заказ — со страницы или из чата, — сложить его в
+ * очередь и, когда до него дойдут руки у {@link InsightWorker}, сходить в
+ * модель нужное число раз и вернуть текст. Проверка «моя ли это задача» сюда не
+ * заходит: она живёт там же, где для остального кабинета, — в
+ * {@code JobHistory}, а для чата в {@code LocalHomeApi}.</p>
  *
  * <p>Час записи в окно модели не влезает, поэтому счёт идёт в два прохода:
  * сначала по кускам ({@link TranscriptChunks}), потом сведение. Это дороже
@@ -110,12 +111,27 @@ public class InsightService {
     }
 
     /**
-     * Ставит обработку в очередь.
+     * Ставит обработку в очередь; результат покажет страница.
      *
      * @return сообщение для человека; пусто — заказ принят
      */
     @Transactional
     public Optional<String> order(UUID jobId, InsightKind kind, Integer ratio, String topic) {
+        return order(jobId, kind, ratio, topic, null);
+    }
+
+    /**
+     * Ставит обработку в очередь и запоминает, куда прислать готовое.
+     *
+     * <p>{@code notifyChatId} задаётся, когда заказ пришёл из Telegram: там
+     * страницы, которая сама покажет ответ, нет — ответ должен прийти в чат.
+     * Пусто — обычный заказ со страницы.</p>
+     *
+     * @return сообщение для человека; пусто — заказ принят
+     */
+    @Transactional
+    public Optional<String> order(UUID jobId, InsightKind kind, Integer ratio, String topic,
+                                  Long notifyChatId) {
         if (!model.available()) {
             return Optional.of("Обработка текста сейчас недоступна: языковая модель не отвечает.");
         }
@@ -139,11 +155,12 @@ public class InsightService {
         insight.setRatio(kind == InsightKind.SUMMARY ? clamp(ratio) : null);
         insight.setTopic(kind == InsightKind.TOPIC ? question : null);
         insight.setState(JobState.QUEUED);
+        insight.setNotifyChatId(notifyChatId);
         insight.setCreatedAt(Instant.now());
         insights.save(insight);
 
-        log.info("Заказана обработка расшифровки: jobId={}, вид={}, доля={}, тема='{}'",
-                jobId, kind, insight.getRatio(), insight.getTopic());
+        log.info("Заказана обработка расшифровки: jobId={}, вид={}, доля={}, тема='{}', чат={}",
+                jobId, kind, insight.getRatio(), insight.getTopic(), notifyChatId);
         return Optional.empty();
     }
 
@@ -170,7 +187,7 @@ public class InsightService {
                 .map(insight -> {
                     insight.setState(JobState.RUNNING);
                     return new Order(insight.getId(), insight.getJobId(), insight.getKind(),
-                            insight.getRatio(), insight.getTopic());
+                            insight.getRatio(), insight.getTopic(), insight.getNotifyChatId());
                 });
     }
 
@@ -346,6 +363,14 @@ public class InsightService {
         return Math.min(MAX_RATIO, Math.max(MIN_RATIO, value));
     }
 
-    /** Заказ, взятый в работу: всё нужное для счёта, без открытой сессии базы. */
-    public record Order(long id, UUID jobId, InsightKind kind, Integer ratio, String topic) {}
+    /**
+     * Заказ, взятый в работу: всё нужное для счёта и для ответа, без открытой
+     * сессии базы.
+     *
+     * <p>{@code notifyChatId} не пуст, если заказ пришёл из чата: воркер
+     * отправит туда готовое сам. У заказа со страницы он пуст — там ответ
+     * забирает сама страница.</p>
+     */
+    public record Order(long id, UUID jobId, InsightKind kind, Integer ratio, String topic,
+                        Long notifyChatId) {}
 }

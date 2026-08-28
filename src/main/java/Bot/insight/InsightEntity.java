@@ -64,6 +64,16 @@ public class InsightEntity {
     @Column(columnDefinition = "text")
     private String error;
 
+    /**
+     * Чат, куда прислать готовое; {@code null} — заказ со страницы.
+     *
+     * <p>Хранится у заказа, а не выводится из владельца задачи: к аккаунту на
+     * сайте бывает привязан чат, и тогда выжимка, заказанная в браузере,
+     * приходила бы ещё и в Telegram — второй раз и без спроса.</p>
+     */
+    @Column(name = "notify_chat_id")
+    private Long notifyChatId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

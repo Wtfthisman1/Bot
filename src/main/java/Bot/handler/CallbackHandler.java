@@ -48,6 +48,11 @@ public class CallbackHandler {
             return;
         }
 
+        if (callbackData.startsWith(Keyboards.CB_SUMMARY_PREFIX)) {
+            handleSummary(chatId, callbackData);
+            return;
+        }
+
         if (callbackData.startsWith(Keyboards.CB_LOGIN_PREFIX)) {
             handleLoginConfirmation(chatId, callbackData, userName);
             return;
@@ -166,6 +171,32 @@ public class CallbackHandler {
 
         log.info("Запрошен формат расшифровки: chatId={}, формат={}", chatId, format.get());
         home.sendTranscript(Owner.telegram(chatId), parts[2], format.get());
+    }
+
+    /**
+     * Разбирает {@code sum:<id>} — заказ выжимки по готовой расшифровке.
+     *
+     * <p>Ответа с текстом здесь не будет: модель считает минутами, и держать
+     * всё это время нажатую кнопку нельзя. Бот подтверждает, что взял заказ, а
+     * готовое пришлёт дом отдельным сообщением, когда посчитает.</p>
+     */
+    private void handleSummary(long chatId, String callbackData) {
+        String jobId = callbackData.substring(Keyboards.CB_SUMMARY_PREFIX.length());
+        if (jobId.isBlank()) {
+            log.warn("Заказ выжимки без задачи: chatId={}, data='{}'", chatId, callbackData);
+            commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
+            return;
+        }
+
+        log.info("Заказана выжимка: chatId={}, jobId={}", chatId, jobId);
+        Optional<String> refusal = home.summarize(Owner.telegram(chatId), jobId);
+        if (refusal.isPresent()) {
+            commandHandler.showMenu(chatId, "🤷 " + refusal.get());
+            return;
+        }
+
+        commandHandler.showMenu(chatId,
+                "✨ Считаю выжимку. Пришлю её сюда — на час записи уходит несколько минут.");
     }
 
     /**

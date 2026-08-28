@@ -30,6 +30,7 @@ public final class HomeProtocol {
     public static final String UPLOAD_LINK = ROOT + "/upload-links";
     public static final String STATUS = ROOT + "/status";
     public static final String TRANSCRIPT = ROOT + "/transcripts/send";
+    public static final String SUMMARY = ROOT + "/transcripts/summary";
     public static final String LINK_ACCOUNT = ROOT + "/accounts/link";
     public static final String BOT_LOGIN = ROOT + "/accounts/bot-login";
 
@@ -45,6 +46,18 @@ public final class HomeProtocol {
     public record OwnerRequest(Owner owner) {}
 
     public record TranscriptRequest(Owner owner, String jobId, TranscriptFormat format) {}
+
+    /** Чья задача и какая — по ней и считается выжимка. */
+    public record SummaryRequest(Owner owner, String jobId) {}
+
+    /**
+     * Причина отказа, либо {@code null}, если заказ принят.
+     *
+     * <p>Отказ здесь — обычный ответ, а не ошибка: задача может оказаться
+     * чужой, без разметки или уже считаться. Пятисотка на такое заставила бы
+     * бота говорить «сломалось» там, где всё работает.</p>
+     */
+    public record RefusalResponse(String refusal) {}
 
     /** Код из кабинета и чат, который к нему привязывают. */
     public record LinkAccountRequest(long chatId, String code) {}

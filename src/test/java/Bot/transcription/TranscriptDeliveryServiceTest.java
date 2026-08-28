@@ -1,6 +1,8 @@
 package Bot.transcription;
 
+import Bot.insight.InsightService;
 import Bot.owner.Owner;
+import Bot.telegram.Keyboards;
 import Bot.processing.JobStore;
 import Bot.telegram.MessageSender;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +28,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Выдача расшифровки: кнопки обещают только те форматы, которые есть на диске,
@@ -40,6 +43,7 @@ class TranscriptDeliveryServiceTest {
 
     @Mock private MessageSender messageSender;
     @Mock private JobStore jobStore;
+    @Mock private InsightService insights;
 
     private TranscriptDeliveryService delivery;
     private Path txt;
@@ -49,7 +53,8 @@ class TranscriptDeliveryServiceTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        delivery = new TranscriptDeliveryService(jobStore, new WordExporter(), messageSender);
+        delivery = new TranscriptDeliveryService(
+                jobStore, new WordExporter(), messageSender, insights);
         txt = Files.writeString(tmp.resolve("лекция.txt"), "текст расшифровки");
 
         // Кнопки находят расшифровку по задаче — мок отвечает так же, как база
@@ -90,6 +95,44 @@ class TranscriptDeliveryServiceTest {
         assertThat(sent.getValue()).exists().hasFileName("лекция.docx");
     }
 
+    /**
+     * Выжимку обещаем, только когда модель отвечает: кнопка, за которой ничего
+     * нет, хуже отсутствующей.
+     */
+    @Test
+    void summaryIsOfferedOnlyWhenModelAnswers() {
+        when(insights.ready()).thenReturn(true);
+
+        delivery.deliver(JOB, CHAT, txt);
+
+        assertThat(buttonLabels()).contains("✨ Выжимка");
+        assertThat(summaryCallback()).isEqualTo(Keyboards.CB_SUMMARY_PREFIX + JOB);
+    }
+
+    @Test
+    void withoutModelThereIsNoSummaryButton() {
+        delivery.deliver(JOB, CHAT, txt);
+
+        assertThat(buttonLabels()).doesNotContain("✨ Выжимка");
+    }
+
+    /**
+     * Модель есть, а субтитров нет — расшифровка всё равно уходит с кнопкой:
+     * раньше пустой список форматов означал сообщение вовсе без клавиатуры.
+     */
+    @Test
+    void summaryComesEvenWhenNoFormatsAreAvailable() {
+        // Файла нет вовсе: ни субтитров рядом, ни текста, из которого собрать Word
+        Path bare = tmp.resolve("удалённая.txt");
+        when(insights.ready()).thenReturn(true);
+
+        delivery.deliver(JOB, CHAT, bare);
+
+        ArgumentCaptor<InlineKeyboardMarkup> markup = ArgumentCaptor.forClass(InlineKeyboardMarkup.class);
+        verify(messageSender).sendTranscript(eq(CHAT), eq(bare), markup.capture());
+        assertThat(markup.getValue().getKeyboard()).hasSize(1);
+    }
+
     /** Устаревшая кнопка не должна оставлять пользователя без ответа. */
     @Test
     void staleButtonExplainsItselfInsteadOfSilence() {
@@ -123,6 +166,12 @@ class TranscriptDeliveryServiceTest {
                 .flatMap(List::stream)
                 .map(InlineKeyboardButton::getText)
                 .toList();
+    }
+
+    /** Callback кнопки выжимки — она всегда идёт последним рядом. */
+    private String summaryCallback() {
+        List<List<InlineKeyboardButton>> rows = keyboard().getKeyboard();
+        return rows.get(rows.size() - 1).get(0).getCallbackData();
     }
 
     /** Идентификатор расшифровки достаём оттуда же, откуда его берёт Telegram. */

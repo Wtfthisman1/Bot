@@ -24,6 +24,8 @@ import Bot.home.HomeProtocol.LinkAccountResponse;
 import Bot.home.HomeProtocol.LinkRequest;
 import Bot.home.HomeProtocol.LinkResponse;
 import Bot.home.HomeProtocol.OwnerRequest;
+import Bot.home.HomeProtocol.RefusalResponse;
+import Bot.home.HomeProtocol.SummaryRequest;
 import Bot.home.HomeProtocol.TelegramFileRequest;
 import Bot.home.HomeProtocol.TranscriptRequest;
 import Bot.owner.Owner;
@@ -150,6 +152,21 @@ public class HttpHomeApi implements HomeApi {
     @Override
     public void sendTranscript(Owner owner, String jobId, TranscriptFormat format) {
         post(HomeProtocol.TRANSCRIPT, new TranscriptRequest(owner, jobId, format));
+    }
+
+    /**
+     * Пустой ответ считается принятым заказом: так отвечает дом версии, где
+     * выжимки ещё не было. Половины обновляются по очереди, и молчание старого
+     * дома не должно выглядеть отказом.
+     */
+    @Override
+    public Optional<String> summarize(Owner owner, String jobId) {
+        RefusalResponse response = call(() -> client.post()
+                .uri(HomeProtocol.SUMMARY)
+                .body(new SummaryRequest(owner, jobId))
+                .retrieve()
+                .body(RefusalResponse.class));
+        return Optional.ofNullable(response).map(RefusalResponse::refusal);
     }
 
     /* ───────── helpers ───────── */

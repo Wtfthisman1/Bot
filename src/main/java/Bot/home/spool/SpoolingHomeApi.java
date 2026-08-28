@@ -226,6 +226,16 @@ public class SpoolingHomeApi implements HomeApi {
         delegate.sendTranscript(owner, jobId, format);
     }
 
+    /**
+     * Откладывать нечего: выжимку считает дом по расшифровке, которая у него же
+     * и лежит. При спящей машине человек услышит «недоступно» — как и с
+     * ссылкой на форму загрузки.
+     */
+    @Override
+    public java.util.Optional<String> summarize(Owner owner, String jobId) {
+        return delegate.summarize(owner, jobId);
+    }
+
     @Override
     public java.util.Optional<String> linkTelegram(long chatId, String code) {
         return delegate.linkTelegram(chatId, code);

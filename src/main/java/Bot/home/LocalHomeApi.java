@@ -20,6 +20,8 @@ import Bot.account.BotLoginService;
 import Bot.account.QuotaService;
 import Bot.config.Profiles;
 import Bot.download.DownloadService;
+import Bot.insight.InsightKind;
+import Bot.insight.InsightService;
 import Bot.owner.Owner;
 import Bot.processing.JobStore;
 import Bot.processing.MediaKind;
@@ -35,6 +37,8 @@ import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 @Profile(Profiles.HOME)
 @Service
@@ -50,6 +54,7 @@ public class LocalHomeApi implements HomeApi {
     private final UploadService uploadService;
     private final TelegramFileDownloader fileDownloader;
     private final TranscriptDeliveryService transcriptDelivery;
+    private final InsightService insights;
 
     @Override
     public Acceptance transcribeLink(Owner owner, String url) {
@@ -101,6 +106,35 @@ public class LocalHomeApi implements HomeApi {
     @Override
     public void sendTranscript(Owner owner, String jobId, TranscriptFormat format) {
         transcriptDelivery.sendFormat(owner.telegramChatId(), jobId, format);
+    }
+
+    /**
+     * Заказ выжимки из чата.
+     *
+     * <p>Владелец сверяется по той же расшифровке, что ищут кнопки форматов:
+     * нашлась — задача его и уже посчитана, а значит, есть что пересказывать.
+     * Нечитаемый id — не ошибка вызова, а кнопка из очень старого сообщения,
+     * и ответ на неё такой же, как на чужую задачу.</p>
+     */
+    @Override
+    public Optional<String> summarize(Owner owner, String jobId) {
+        UUID id;
+        try {
+            id = UUID.fromString(jobId);
+        } catch (IllegalArgumentException e) {
+            log.warn("Неразбираемый идентификатор задачи в заказе выжимки: владелец={}", owner);
+            return Optional.of("Эта расшифровка больше недоступна.");
+        }
+
+        if (jobStore.transcriptOf(id, owner).isEmpty()) {
+            log.info("Выжимка не по своей задаче: владелец={}, jobId={}", owner, id);
+            return Optional.of("Эта расшифровка больше недоступна.");
+        }
+
+        // Доля по умолчанию: в чате её выбирать нечем, а 15% — то же, что
+        // предлагает страница, и на живых записях выходит связный пересказ
+        Long chatId = owner.isTelegram() ? owner.telegramChatId() : null;
+        return insights.order(id, InsightKind.SUMMARY, null, null, chatId);
     }
 
     @Override

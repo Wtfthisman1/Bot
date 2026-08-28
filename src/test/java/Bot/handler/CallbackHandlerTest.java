@@ -12,12 +12,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Optional;
+
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * Сценарий из ТЗ: кнопка → «пришлите ссылку», и обратный порядок —
@@ -156,6 +160,40 @@ class CallbackHandlerTest {
     @Test
     void unknownFormatCodeShowsMenu() {
         handler().handle(CHAT, "tr:pdf:abc123", "Аня");
+
+        verify(commandHandler).showMenu(eq(CHAT), any());
+        verifyNoInteractions(home);
+    }
+
+    /**
+     * Кнопка «Выжимка» заказывает счёт и сразу отвечает: текст придёт минутами
+     * позже, отдельным сообщением из дома.
+     */
+    @Test
+    void summaryButtonOrdersItAndPromisesAnAnswer() {
+        when(home.summarize(Owner.telegram(CHAT), "abc123")).thenReturn(Optional.empty());
+
+        handler().handle(CHAT, Keyboards.CB_SUMMARY_PREFIX + "abc123", "Аня");
+
+        verify(home).summarize(Owner.telegram(CHAT), "abc123");
+        verify(commandHandler).showMenu(eq(CHAT), contains("Считаю выжимку"));
+    }
+
+    /** Отказ дома — это ответ человеку, а не молчание. */
+    @Test
+    void refusedSummaryIsExplained() {
+        when(home.summarize(Owner.telegram(CHAT), "abc123"))
+                .thenReturn(Optional.of("Предыдущая обработка ещё считается — дождитесь её."));
+
+        handler().handle(CHAT, Keyboards.CB_SUMMARY_PREFIX + "abc123", "Аня");
+
+        verify(commandHandler).showMenu(eq(CHAT), contains("ещё считается"));
+    }
+
+    /** Кнопка без задачи — из очень старого сообщения: в дом за этим не ходим. */
+    @Test
+    void summaryWithoutJobShowsMenu() {
+        handler().handle(CHAT, Keyboards.CB_SUMMARY_PREFIX, "Аня");
 
         verify(commandHandler).showMenu(eq(CHAT), any());
         verifyNoInteractions(home);
