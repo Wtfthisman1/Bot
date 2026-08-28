@@ -176,7 +176,7 @@ class SpoolingHomeApiTest {
     void statusAddsDeferredToWhatHomeReports() {
         homeIsAsleep();
         api.transcribeLink(OWNER, URL);
-        when(delegate.status(OWNER)).thenReturn(new HomeApi.OwnerStatus(2, 1, List.of()));
+        when(delegate.status(OWNER)).thenReturn(new HomeApi.OwnerStatus(2, 1, List.of(), List.of()));
 
         assertThat(api.status(OWNER).queued()).isEqualTo(3);
     }

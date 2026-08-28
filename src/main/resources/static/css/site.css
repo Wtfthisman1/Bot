@@ -236,6 +236,22 @@ td { padding: 12px 10px; border-top: 1px solid var(--line); vertical-align: top;
 
 .chip.open { border-color: var(--accent); color: var(--accent); }
 
+/*
+  «Остановить» стоит в одном ряду со ссылками на файлы, поэтому и выглядит
+  так же — фишкой, а не кнопкой формы. Форма вокруг неё нужна только ради
+  POST: ссылка, меняющая состояние, открывалась бы предпросмотром мессенджера.
+*/
+form.inline { display: inline; }
+.chip.stop {
+    background: none;
+    color: var(--bad, #d9534f);
+    border-color: var(--bad, #d9534f);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+
 /* ── поиск ── */
 
 .search input[type=search], .inline-search input[type=search] {

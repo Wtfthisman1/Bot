@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -311,11 +312,23 @@ public class CommandHandler {
                 return;
             }
 
+            // Названия состояний прямые: раньше здесь стояло «ожидает
+            // транскрипции» напротив числа тех, что расшифровываются прямо
+            // сейчас, и сводка противоречила истории на сайте
             StringBuilder message = new StringBuilder("📊 <b>Статус обработки</b>\n\n")
-                    .append("⏳ Ожидает загрузки: ").append(status.queued()).append('\n')
-                    .append("🔄 Ожидает транскрипции: ").append(status.running()).append('\n')
-                    .append("📥 Активных загрузок: ").append(status.downloads().size()).append('\n')
+                    .append("⏳ Ждут очереди: ").append(status.queued()).append('\n')
+                    .append("⚙️ Считаются сейчас: ").append(status.running()).append('\n')
                     .append("📋 Всего задач: ").append(status.total()).append('\n');
+
+            if (!status.jobs().isEmpty()) {
+                message.append('\n');
+                for (HomeApi.ActiveJob job : status.jobs()) {
+                    message.append(job.running() ? "⚙️ " : "⏳ ")
+                            .append(MessageSender.escapeHtml(job.title()))
+                            .append(job.download() ? " — скачивание" : "")
+                            .append('\n');
+                }
+            }
 
             if (!status.downloads().isEmpty()) {
                 message.append("\n🔗 <b>Скачивается сейчас:</b>\n");
@@ -327,7 +340,14 @@ public class CommandHandler {
             }
 
             message.append("\n⏱️ Всё считается в фоне — уведомлю по готовности.");
-            messageSender.sendMessageWithKeyboard(chatId, message.toString(), "HTML", Keyboards.mainMenu());
+
+            // Кнопки только если есть что останавливать: пустая клавиатура из
+            // одного «в меню» под сводкой ничего не добавляет
+            List<Keyboards.Job> cancellable = status.jobs().stream()
+                    .map(job -> new Keyboards.Job(job.id(), job.title()))
+                    .toList();
+            messageSender.sendMessageWithKeyboard(chatId, message.toString(), "HTML",
+                    cancellable.isEmpty() ? Keyboards.mainMenu() : Keyboards.activeJobs(cancellable));
 
         } catch (Exception e) {
             // Статус — вспомогательный экран: молчать хуже, чем признаться,
@@ -335,6 +355,22 @@ public class CommandHandler {
             log.error("Ошибка получения статуса: chatId={}", chatId, e);
             messageSender.sendMessage(chatId, "❌ Не удалось получить статус. Попробуйте позже.");
         }
+    }
+
+    /**
+     * Останавливает задачу по кнопке из сводки.
+     *
+     * <p>Отказ здесь — не поломка: пока человек смотрел на сводку, задача могла
+     * доделаться, и тогда останавливать уже нечего. Сказать об этом надо
+     * прямо, иначе кнопка выглядит сломанной.</p>
+     */
+    public void cancelJob(long chatId, String jobId) {
+        log.info("Запрошена остановка задачи: chatId={}, jobId={}", chatId, jobId);
+        if (home.cancelJob(Owner.telegram(chatId), jobId)) {
+            showMenu(chatId, "⛔ Остановлено. Лимит расшифровок эта задача не потратила.");
+            return;
+        }
+        showMenu(chatId, "🤷 Эту задачу уже не остановить — она успела доделаться или снята раньше.");
     }
 
     /** То, что идёт после команды: «/start login_ABC» → «login_ABC». */

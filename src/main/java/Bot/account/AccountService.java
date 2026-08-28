@@ -269,6 +269,25 @@ public class AccountService {
         return owners;
     }
 
+    /**
+     * Все владельцы того же человека — по любому из его владельцев.
+     *
+     * <p>В отличие от {@link #forTelegramChat}, ничего не заводит: сводку
+     * задач спрашивают чаще, чем ставят их, и заводить аккаунт на каждый
+     * «Статус» незачем. Чат, который нигде не зарегистрирован, отвечает сам
+     * за себя — задачи у него всё равно только свои.</p>
+     */
+    @Transactional(readOnly = true)
+    public List<Owner> ownersAround(Owner owner) {
+        if (!owner.isTelegram()) {
+            return ownersOf(UUID.fromString(owner.id()));
+        }
+        return identities
+                .findByProviderAndProviderUserId(IdentityProvider.TELEGRAM, owner.id())
+                .map(identity -> ownersOf(identity.getAccountId()))
+                .orElseGet(() -> List.of(owner));
+    }
+
     /** Какими способами в этот аккаунт можно войти — для страницы профиля. */
     @Transactional(readOnly = true)
     public List<IdentityProvider> providersOf(UUID accountId) {

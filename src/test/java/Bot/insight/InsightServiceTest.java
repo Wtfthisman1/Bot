@@ -8,6 +8,7 @@ package Bot.insight;
  * делаем с ответом. На живой модели те же проверки заняли бы видеокарту на
  * минуты и зависели бы от её настроения.</p>
  */
+import Bot.processing.RunningProcesses;
 import Bot.owner.Owner;
 import Bot.processing.JobRepository;
 import Bot.processing.JobState;
@@ -40,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({PostgresTestContainer.class, TranscriptSegments.class, JobStore.class,
-        InsightService.class, InsightServiceTest.FakeModel.class})
+        RunningProcesses.class, InsightService.class, InsightServiceTest.FakeModel.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 // Кусок в 200 символов — это несколько реплик: так в тесте видно оба пути,
 // и «влезло за один раз», и «пришлось резать и сводить»

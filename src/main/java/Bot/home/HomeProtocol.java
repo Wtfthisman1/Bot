@@ -32,6 +32,7 @@ public final class HomeProtocol {
     public static final String STATUS = ROOT + "/status";
     public static final String TRANSCRIPT = ROOT + "/transcripts/send";
     public static final String INSIGHT = ROOT + "/transcripts/insight";
+    public static final String CANCEL = ROOT + "/jobs/cancel";
     public static final String LINK_ACCOUNT = ROOT + "/accounts/link";
     public static final String BOT_LOGIN = ROOT + "/accounts/bot-login";
 
@@ -47,6 +48,12 @@ public final class HomeProtocol {
     public record OwnerRequest(Owner owner) {}
 
     public record TranscriptRequest(Owner owner, String jobId, TranscriptFormat format) {}
+
+    /** Чья задача и какая — её и останавливаем. */
+    public record CancelRequest(Owner owner, String jobId) {}
+
+    /** Успели ли остановить: задача могла доделаться, пока человек жал кнопку. */
+    public record CancelResponse(boolean cancelled) {}
 
     /** Чья задача, какая и что с ней делать: пересказать или разобрать по теме. */
     public record InsightRequest(Owner owner, String jobId, InsightKind kind, String topic) {}

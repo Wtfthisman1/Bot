@@ -147,6 +147,35 @@ public class CabinetController {
     }
 
     /**
+     * Остановка задачи, которая ещё идёт.
+     *
+     * <p>Кнопка есть и в боте, и здесь, потому что задачу ставят в одном месте,
+     * а спохватываются в другом: запись на час занимает видеокарту надолго, и
+     * ждать её конца ради ошибки в ссылке незачем.</p>
+     *
+     * <p>Проверка «моя ли задача» — та же, что у остальных страниц кабинета:
+     * {@code history.find} чужую не отдаст.</p>
+     */
+    @PostMapping("/jobs/{jobId}/cancel")
+    public String cancelJob(@AuthenticationPrincipal AccountPrincipal principal,
+                            @PathVariable String jobId,
+                            RedirectAttributes redirect) {
+        JobEntity job = parseId(jobId)
+                .flatMap(id -> history.find(principal.accountId(), id))
+                .orElse(null);
+        if (job == null) {
+            redirect.addFlashAttribute("error", "Такой задачи нет.");
+            return "redirect:/cabinet";
+        }
+
+        boolean stopped = jobStore.cancel(job.getId(), job.owner());
+        redirect.addFlashAttribute(stopped ? "message" : "error", stopped
+                ? "⛔ Остановлено. Лимит расшифровок эта задача не потратила."
+                : "Эту задачу уже не остановить — она успела доделаться или снята раньше.");
+        return "redirect:/cabinet";
+    }
+
+    /**
      * Результат задачи: расшифровка в выбранном формате или сам скачанный файл.
      *
      * <p>{@code media} — это исходник (скачанное видео или присланная запись),

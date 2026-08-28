@@ -341,7 +341,9 @@ public class TranscriptController {
             case QUEUED -> "В очереди";
             case RUNNING -> "Считается";
             case DONE -> "Готово";
-            case FAILED -> "Не получилось";
+            // Обработку текста не отменяют: она считается минуты, а не часы,
+            // и такого состояния у неё не бывает
+            case FAILED, CANCELLED -> "Не получилось";
         };
     }
 

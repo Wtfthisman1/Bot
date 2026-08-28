@@ -51,6 +51,17 @@ public interface HomeApi {
     OwnerStatus status(Owner owner);
 
     /**
+     * Останавливает задачу, которая ещё не доделана.
+     *
+     * <p>Решает дом: только там видно, чья это задача и каким процессом она
+     * занята. Отказ — обычный ответ: задача могла доделаться, пока человек
+     * смотрел на кнопку.</p>
+     *
+     * @return {@code true}, если задача и правда остановлена
+     */
+    boolean cancelJob(Owner owner, String jobId);
+
+    /**
      * Отправляет готовую расшифровку в запрошенном формате.
      *
      * <p>Файл лежит дома, поэтому и отправляет его дом. Неизвестный или чужой
@@ -158,11 +169,28 @@ public interface HomeApi {
         public enum Kind { VOICE, AUDIO, VIDEO, DOCUMENT }
     }
 
-    /** Задачи владельца: сколько ждёт очереди, сколько считается, что качается. */
-    record OwnerStatus(long queued, long running, List<ActiveDownload> downloads) {
+    /**
+     * Задачи владельца: сколько ждёт очереди, сколько считается, что качается и
+     * что именно из этого можно остановить.
+     *
+     * <p>Список задач появился вместе с кнопкой «остановить»: одних чисел для
+     * неё мало — надо знать, какую именно задачу отменяют.</p>
+     */
+    record OwnerStatus(long queued, long running,
+                       List<ActiveDownload> downloads, List<ActiveJob> jobs) {
 
         public static OwnerStatus empty() {
-            return new OwnerStatus(0, 0, List.of());
+            return new OwnerStatus(0, 0, List.of(), List.of());
+        }
+
+        /**
+         * Ответ дома, в котором списка задач ещё не было.
+         *
+         * <p>Половины обновляются по очереди, и пустой список лучше падения:
+         * сводка покажется без кнопок отмены — ровно как раньше.</p>
+         */
+        public List<ActiveJob> jobs() {
+            return jobs == null ? List.of() : jobs;
         }
 
         public long total() {
@@ -172,4 +200,7 @@ public interface HomeApi {
 
     /** Незавершённая загрузка — строка в сводке «скачивается сейчас». */
     record ActiveDownload(String url, Instant startedAt) {}
+
+    /** Незавершённая задача: что это, в каком она состоянии и как её назвать. */
+    record ActiveJob(String id, String title, boolean running, boolean download) {}
 }

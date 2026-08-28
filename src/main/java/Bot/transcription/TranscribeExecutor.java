@@ -11,6 +11,7 @@ package Bot.transcription;
 import Bot.config.Profiles;
 import Bot.owner.Owner;
 import Bot.processing.GpuLock;
+import Bot.processing.RunningProcesses;
 import Bot.service.StorageManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -114,11 +116,17 @@ public class TranscribeExecutor {
             java.util.regex.Pattern.compile("^\\[\\d+:\\d+\\.\\d+\\s*-->");
 
     private final StorageManager storageManager;
+    private final RunningProcesses processes;
 
     /**
-     * Запускает whisper-ctranslate2 и возвращает путь к .txt-транскрипту
+     * Запускает whisper-ctranslate2 и возвращает путь к .txt-транскрипту.
+     *
+     * <p>{@code jobId} нужен не для счёта, а для отмены: пока Whisper работает,
+     * его процесс лежит в {@link RunningProcesses}, и «остановить» означает
+     * убить именно его. Без этого пометка в базе оставила бы видеокарту занятой
+     * до конца записи.</p>
      */
-    public Path run(Owner owner, Path video) throws IOException, InterruptedException {
+    public Path run(UUID jobId, Owner owner, Path video) throws IOException, InterruptedException {
 
         Objects.requireNonNull(video, "video");
         if (!Files.exists(video))
@@ -172,7 +180,7 @@ public class TranscribeExecutor {
         gpuLock.acquire("транскрипция " + video.getFileName());
         try {
 
-        Process proc = pb.start();
+        Process proc = processes.watch(jobId, pb.start());
         log.info("Whisper запущен: pid={}, модель={}, устройство={}, потоков={}, язык={}",
                 proc.pid(), model, device, threads, language);
 
@@ -254,6 +262,7 @@ public class TranscribeExecutor {
         }
 
         } finally {
+            processes.forget(jobId);
             gpuLock.release();
         }
 

@@ -55,11 +55,16 @@ public interface JobRepository extends JpaRepository<JobEntity, UUID> {
      *
      * <p>{@code downloadId is null} отделяет расшифровку от чистого скачивания:
      * у задачи «скачать файл» идентификатор загрузки есть, и квоту она не
-     * тратит. Сорвавшиеся задачи не считаются: человек не виноват, что ссылка
-     * оказалась битой.</p>
+     * тратит. Сорвавшиеся и отменённые не считаются: человек не виноват, что
+     * ссылка оказалась битой, и не должен платить лимитом за то, что сам
+     * остановил.</p>
      */
-    long countByOwnerTypeAndOwnerIdAndDownloadIdIsNullAndStateNotAndCreatedAtGreaterThanEqual(
-            Owner.OwnerType ownerType, String ownerId, JobState state, Instant since);
+    long countByOwnerTypeAndOwnerIdAndDownloadIdIsNullAndStateNotInAndCreatedAtGreaterThanEqual(
+            Owner.OwnerType ownerType, String ownerId, List<JobState> states, Instant since);
+
+    /** Незавершённые задачи владельца — их показывает «Статус» и их можно отменить. */
+    List<JobEntity> findByOwnerTypeAndOwnerIdAndStateInOrderByCreatedAtDesc(
+            Owner.OwnerType ownerType, String ownerId, List<JobState> states);
 
     /** История задач владельца — то, что показывает страница «мои задачи». */
     List<JobEntity> findTop200ByOwnerTypeAndOwnerIdOrderByCreatedAtDesc(

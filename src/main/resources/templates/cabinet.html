@@ -136,6 +136,14 @@
                 </td>
                 <td class="files">
                     <!--
+                      Пока задача идёт, показывать нечего, кроме кнопки «стоп»:
+                      результата ещё нет, а видеокарту она уже занимает
+                    -->
+                    <form th:if="${job.active()}" method="post" class="inline"
+                          th:action="@{/cabinet/jobs/{id}/cancel(id=${job.id()})}">
+                        <button type="submit" class="chip stop">Остановить</button>
+                    </form>
+                    <!--
                       Открыть расшифровку — первым: читают и правят её чаще, чем
                       скачивают файлы
                     -->

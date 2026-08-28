@@ -23,6 +23,8 @@ import Bot.home.HomeProtocol.LinkRequest;
 import Bot.home.HomeProtocol.LinkResponse;
 import Bot.home.HomeProtocol.OwnerRequest;
 import Bot.home.HomeProtocol.RefusalResponse;
+import Bot.home.HomeProtocol.CancelRequest;
+import Bot.home.HomeProtocol.CancelResponse;
 import Bot.home.HomeProtocol.InsightRequest;
 import Bot.home.HomeProtocol.TelegramFileRequest;
 import Bot.home.HomeProtocol.TranscriptRequest;
@@ -101,6 +103,11 @@ public class HomeApiController {
     public RefusalResponse orderInsight(@RequestBody InsightRequest request) {
         return new RefusalResponse(home.orderInsight(
                 request.owner(), request.jobId(), request.kind(), request.topic()).orElse(null));
+    }
+
+    @PostMapping("/jobs/cancel")
+    public CancelResponse cancelJob(@RequestBody CancelRequest request) {
+        return new CancelResponse(home.cancelJob(request.owner(), request.jobId()));
     }
 
     @PostMapping("/accounts/bot-login")

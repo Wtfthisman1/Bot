@@ -51,14 +51,20 @@ public class CallbackHandler {
         }
 
         if (callbackData.startsWith(Keyboards.CB_SUMMARY_PREFIX)) {
-            withTranscript(chatId, callbackData, Keyboards.CB_SUMMARY_PREFIX,
+            withJob(chatId, callbackData, Keyboards.CB_SUMMARY_PREFIX,
                     jobId -> commandHandler.orderInsight(chatId, jobId, InsightKind.SUMMARY, null));
             return;
         }
 
         if (callbackData.startsWith(Keyboards.CB_TOPIC_PREFIX)) {
-            withTranscript(chatId, callbackData, Keyboards.CB_TOPIC_PREFIX,
+            withJob(chatId, callbackData, Keyboards.CB_TOPIC_PREFIX,
                     jobId -> commandHandler.askTopic(chatId, jobId));
+            return;
+        }
+
+        if (callbackData.startsWith(Keyboards.CB_CANCEL_JOB_PREFIX)) {
+            withJob(chatId, callbackData, Keyboards.CB_CANCEL_JOB_PREFIX,
+                    jobId -> commandHandler.cancelJob(chatId, jobId));
             return;
         }
 
@@ -183,14 +189,14 @@ public class CallbackHandler {
     }
 
     /**
-     * Достаёт из кнопки расшифровку и передаёт её действию.
+     * Достаёт из кнопки номер задачи и передаёт его действию.
      *
-     * <p>Обе кнопки обработки несут в callback один и тот же хвост — id
-     * расшифровки, — и обе одинаково устаревают: сообщение могло быть прислано
-     * год назад. Пустой хвост означает именно это, и ответ на него общий.</p>
+     * <p>Кнопки обработки и остановки несут в callback один и тот же хвост — id
+     * задачи, — и все одинаково устаревают: сообщение могло быть прислано год
+     * назад. Пустой хвост означает именно это, и ответ на него общий.</p>
      */
-    private void withTranscript(long chatId, String callbackData, String prefix,
-                                Consumer<String> action) {
+    private void withJob(long chatId, String callbackData, String prefix,
+                         Consumer<String> action) {
         String jobId = callbackData.substring(prefix.length());
         if (jobId.isBlank()) {
             log.warn("Кнопка обработки без задачи: chatId={}, data='{}'", chatId, callbackData);

@@ -216,10 +216,23 @@ public class SpoolingHomeApi implements HomeApi {
         long deferred = spool.countFor(owner);
         try {
             OwnerStatus home = delegate.status(owner);
-            return new OwnerStatus(home.queued() + deferred, home.running(), home.downloads());
+            return new OwnerStatus(home.queued() + deferred, home.running(),
+                    home.downloads(), home.jobs());
         } catch (HomeUnavailableException e) {
-            return new OwnerStatus(deferred, 0, List.of());
+            // Отложенное в спуле дом ещё не видел, поэтому и отменять там нечего:
+            // задачи как таковой пока не существует
+            return new OwnerStatus(deferred, 0, List.of(), List.of());
         }
+    }
+
+    /**
+     * Отмена уходит домой как есть: остановить можно только то, что там уже
+     * считается. Отложенное в спуле дому ещё не отдано, и задачи с номером,
+     * который можно отменить, для него не существует.
+     */
+    @Override
+    public boolean cancelJob(Owner owner, String jobId) {
+        return delegate.cancelJob(owner, jobId);
     }
 
     @Override

@@ -10,6 +10,7 @@ package Bot.download;
 import Bot.config.Profiles;
 import Bot.owner.Owner;
 import Bot.processing.MediaKind;
+import Bot.processing.RunningProcesses;
 import Bot.service.StorageManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import org.slf4j.MDC;
 import java.util.concurrent.TimeUnit;
 
@@ -57,14 +59,16 @@ public class DownloaderExecutor {
     private static final Duration PROCESS_TIMEOUT = Duration.ofMinutes(30);
 
     private final StorageManager storageManager;
+    private final RunningProcesses processes;
 
     /**
      * Качает медиа по url в {owner}/downloaded/{slug}_{timestamp}{ext}
      *
+     * @param jobId чья это задача — по нему процесс находят, чтобы остановить
      * @param media что тянуть: только звук (для транскрипции) или видео
      * @return полный {@link Path} к загруженному файлу
      */
-    public Path download(Owner owner, String url, MediaKind media)
+    public Path download(UUID jobId, Owner owner, String url, MediaKind media)
             throws IOException, InterruptedException {
 
         Objects.requireNonNull(url, "url");
@@ -93,7 +97,7 @@ public class DownloaderExecutor {
 
         addJsRuntimeToPath(pb);
 
-        Process proc = pb.start();
+        Process proc = processes.watch(jobId, pb.start());
         log.info("Скачивание запущено: media={}, pid={}, файл={}",
                 media, proc.pid(), dst.getFileName());
 
@@ -122,27 +126,31 @@ public class DownloaderExecutor {
             errBuf.append(ln).append('\n');
         });
 
-        boolean finished = proc.waitFor(PROCESS_TIMEOUT.toMinutes(), TimeUnit.MINUTES);
-        if (!finished) {
-            proc.destroyForcibly();
-            throw new RuntimeException("YT-DLP timeout > " + PROCESS_TIMEOUT);
+        try {
+            boolean finished = proc.waitFor(PROCESS_TIMEOUT.toMinutes(), TimeUnit.MINUTES);
+            if (!finished) {
+                proc.destroyForcibly();
+                throw new RuntimeException("YT-DLP timeout > " + PROCESS_TIMEOUT);
+            }
+
+            tOut.join();
+            tErr.join();
+
+            int exit = proc.exitValue();
+            if (exit != 0) {
+                String errorOutput = errBuf.toString();
+                String errorMessage = analyzeYtDlpError(exit, errorOutput, url);
+                log.error("Скачивание не удалось: код={}, url={}", exit, url);
+                throw new RuntimeException(errorMessage);
+            }
+
+            if (!Files.exists(dst))
+                throw new IOException("Файл не создан: " + dst);
+
+            return dst;
+        } finally {
+            processes.forget(jobId);
         }
-
-        tOut.join();
-        tErr.join();
-
-        int exit = proc.exitValue();
-        if (exit != 0) {
-            String errorOutput = errBuf.toString();
-            String errorMessage = analyzeYtDlpError(exit, errorOutput, url);
-            log.error("Скачивание не удалось: код={}, url={}", exit, url);
-            throw new RuntimeException(errorMessage);
-        }
-
-        if (!Files.exists(dst))
-            throw new IOException("Файл не создан: " + dst);
-
-        return dst;
     }
 
     /**

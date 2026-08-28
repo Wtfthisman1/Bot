@@ -4,6 +4,7 @@ package Bot.account;
  * Квота: три расшифровки в месяц на аккаунт, скачивания не в счёт, а
  * привязанная переписка тратит тот же лимит, что и сайт.
  */
+import Bot.processing.RunningProcesses;
 import Bot.owner.Owner;
 import Bot.processing.JobRepository;
 import Bot.processing.JobStore;
@@ -26,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({PostgresTestContainer.class, AccountService.class, QuotaService.class, JobStore.class})
+@Import({PostgresTestContainer.class, AccountService.class, QuotaService.class, JobStore.class,
+        RunningProcesses.class})
 @TestPropertySource(properties = {
         "quota.enabled=true",
         "quota.free-transcriptions-per-month=3",

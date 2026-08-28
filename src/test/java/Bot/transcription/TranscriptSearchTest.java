@@ -3,6 +3,7 @@ package Bot.transcription;
 /**
  * Поиск ищет место в записи: реплику со временем — и только среди своих задач.
  */
+import Bot.processing.RunningProcesses;
 import Bot.owner.Owner;
 import Bot.processing.JobRepository;
 import Bot.processing.JobStore;
@@ -29,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({PostgresTestContainer.class, TranscriptSegments.class, TranscriptSearch.class,
-        JobStore.class})
+        JobStore.class, RunningProcesses.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class TranscriptSearchTest {
 

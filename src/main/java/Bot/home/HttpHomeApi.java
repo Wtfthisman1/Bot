@@ -25,6 +25,8 @@ import Bot.home.HomeProtocol.LinkRequest;
 import Bot.home.HomeProtocol.LinkResponse;
 import Bot.home.HomeProtocol.OwnerRequest;
 import Bot.home.HomeProtocol.RefusalResponse;
+import Bot.home.HomeProtocol.CancelRequest;
+import Bot.home.HomeProtocol.CancelResponse;
 import Bot.home.HomeProtocol.InsightRequest;
 import Bot.home.HomeProtocol.TelegramFileRequest;
 import Bot.home.HomeProtocol.TranscriptRequest;
@@ -168,6 +170,16 @@ public class HttpHomeApi implements HomeApi {
                 .retrieve()
                 .body(RefusalResponse.class));
         return Optional.ofNullable(response).map(RefusalResponse::refusal);
+    }
+
+    @Override
+    public boolean cancelJob(Owner owner, String jobId) {
+        CancelResponse response = call(() -> client.post()
+                .uri(HomeProtocol.CANCEL)
+                .body(new CancelRequest(owner, jobId))
+                .retrieve()
+                .body(CancelResponse.class));
+        return response != null && response.cancelled();
     }
 
     /* ───────── helpers ───────── */

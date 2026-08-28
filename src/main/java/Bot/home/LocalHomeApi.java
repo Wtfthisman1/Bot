@@ -23,6 +23,8 @@ import Bot.download.DownloadService;
 import Bot.insight.InsightKind;
 import Bot.insight.InsightService;
 import Bot.owner.Owner;
+import Bot.processing.JobEntity;
+import Bot.processing.JobState;
 import Bot.processing.JobStore;
 import Bot.processing.MediaKind;
 import Bot.processing.ProcessingJob;
@@ -36,6 +38,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -94,13 +97,48 @@ public class LocalHomeApi implements HomeApi {
         return uploadService.generate(owner);
     }
 
+    /**
+     * Сводка по всем владельцам одного человека.
+     *
+     * <p>Задачи с сайта записаны на аккаунт, задачи из чата — на чат, и
+     * считать только свои значило бы показывать в боте меньше, чем показывает
+     * кабинет: история и лимит у них давно общие.</p>
+     */
     @Override
     public OwnerStatus status(Owner owner) {
-        JobStore.OwnerLoad load = jobStore.load(owner);
-        List<ActiveDownload> downloads = jobStore.activeDownloads(owner).stream()
-                .map(job -> new ActiveDownload(job.url(), job.startedAt()))
-                .toList();
-        return new OwnerStatus(load.queued(), load.running(), downloads);
+        long queued = 0;
+        long running = 0;
+        List<ActiveDownload> downloads = new ArrayList<>();
+        List<ActiveJob> jobs = new ArrayList<>();
+
+        for (Owner each : accounts.ownersAround(owner)) {
+            JobStore.OwnerLoad load = jobStore.load(each);
+            queued += load.queued();
+            running += load.running();
+            jobStore.activeDownloads(each).stream()
+                    .map(job -> new ActiveDownload(job.url(), job.startedAt()))
+                    .forEach(downloads::add);
+            jobStore.unfinished(each).stream().map(LocalHomeApi::toActiveJob).forEach(jobs::add);
+        }
+        return new OwnerStatus(queued, running, downloads, jobs);
+    }
+
+    /**
+     * Отмена задачи из чата.
+     *
+     * <p>Сверяется не только владелец кнопки, но и все владельцы того же
+     * человека: задачу могли поставить на сайте, а остановить — из чата.</p>
+     */
+    @Override
+    public boolean cancelJob(Owner owner, String jobId) {
+        UUID id;
+        try {
+            id = UUID.fromString(jobId);
+        } catch (IllegalArgumentException e) {
+            log.warn("Неразбираемый идентификатор задачи в отмене: владелец={}", owner);
+            return false;
+        }
+        return accounts.ownersAround(owner).stream().anyMatch(each -> jobStore.cancel(id, each));
     }
 
     @Override
@@ -145,5 +183,16 @@ public class LocalHomeApi implements HomeApi {
     @Override
     public java.util.Optional<String> linkTelegram(long chatId, String code) {
         return accounts.redeemLinkCode(code, chatId).map(AccountService.Account::title);
+    }
+
+    /** Строка задачи для сводки: чем она была и что с ней сейчас. */
+    private static ActiveJob toActiveJob(JobEntity job) {
+        String title = job.getUrl() != null
+                ? job.getUrl()
+                : job.getFilePath() != null
+                        ? Path.of(job.getFilePath()).getFileName().toString()
+                        : "Задача " + job.getId().toString().substring(0, 8);
+        return new ActiveJob(job.getId().toString(), title,
+                job.getState() == JobState.RUNNING, job.getDownloadId() != null);
     }
 }

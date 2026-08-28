@@ -106,6 +106,7 @@ public class JobHistory {
                 job.getDownloadId() != null ? "Скачивание" : "Расшифровка",
                 stateText(job),
                 job.getState() == JobState.FAILED,
+                job.getState() == JobState.QUEUED || job.getState() == JobState.RUNNING,
                 WHEN.format(job.getCreatedAt()),
                 job.owner().isTelegram(),
                 availableFormats(transcript),
@@ -131,6 +132,7 @@ public class JobHistory {
                     ? "Скачивается" : "Расшифровывается";
             case DONE -> "Готово";
             case FAILED -> "Не получилось";
+            case CANCELLED -> "Отменено";
         };
     }
 
@@ -161,6 +163,8 @@ public class JobHistory {
                         String kind,
                         String state,
                         boolean failed,
+                        /** Ещё не доделана — такую можно остановить. */
+                        boolean active,
                         String when,
                         boolean fromTelegram,
                         List<String> formats,

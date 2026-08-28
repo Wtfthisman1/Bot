@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({PostgresTestContainer.class, JobStore.class})
+@Import({PostgresTestContainer.class, JobStore.class, RunningProcesses.class})
 // Каждый вызов store должен идти в своей транзакции, как в бою: общая
 // транзакция теста скрыла бы ровно то, что мы проверяем — блокировки строк
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -231,5 +231,41 @@ class JobStoreTest {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    /** Отменить можно только незаконченное — и только своё. */
+    @Test
+    void ownerStopsOwnQueuedJob() {
+        ProcessingJob job = store.enqueue(ProcessingJob.newLink(OWNER, "https://vimeo.com/1"));
+
+        assertThat(store.cancel(job.id(), OWNER)).isTrue();
+        assertThat(store.isCancelled(job.id())).isTrue();
+        assertThat(store.unfinished(OWNER)).isEmpty();
+    }
+
+    @Test
+    void strangerCannotStopSomeoneElsesJob() {
+        ProcessingJob job = store.enqueue(ProcessingJob.newLink(OWNER, "https://vimeo.com/1"));
+
+        assertThat(store.cancel(job.id(), Owner.telegram(999L))).isFalse();
+        assertThat(store.isCancelled(job.id())).isFalse();
+    }
+
+    /** Доделанную останавливать поздно: кнопку жмут по устаревшей сводке. */
+    @Test
+    void finishedJobIsNotCancelled() {
+        ProcessingJob job = store.enqueue(ProcessingJob.newLink(OWNER, "https://vimeo.com/1"));
+        store.complete(job.id(), Path.of("/tmp/готово.txt"));
+
+        assertThat(store.cancel(job.id(), OWNER)).isFalse();
+    }
+
+    /** Отменённая задача уходит из очереди: воркер её не подхватит. */
+    @Test
+    void cancelledJobIsNotHandedOut() {
+        ProcessingJob job = store.enqueue(ProcessingJob.newLink(OWNER, "https://vimeo.com/1"));
+        store.cancel(job.id(), OWNER);
+
+        assertThat(store.claim()).isEmpty();
     }
 }

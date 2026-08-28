@@ -140,7 +140,7 @@ public class JobWorker {
 
     private void download(ProcessingJob job) {
         try {
-            Path file = downloader.download(job.owner(), job.url(), job.media());
+            Path file = downloader.download(job.id(), job.owner(), job.url(), job.media());
             log.info("Скачано {} (downloadId: {})", file, job.downloadId());
 
             if (job.downloadId() != null) {
@@ -151,6 +151,9 @@ public class JobWorker {
                 jobs.moveToTranscribe(job.withFile(file));
             }
         } catch (Exception e) {
+            if (wasCancelled(job)) {
+                return;
+            }
             log.error("Ошибка скачивания для URL: {}", job.url(), e);
             String message = getErrorMessage(job.url(), e);
             jobs.fail(job.id(), message);
@@ -165,7 +168,7 @@ public class JobWorker {
 
     private void transcribe(ProcessingJob job) {
         try {
-            Path txt = transcriber.run(job.owner(), job.filePath());
+            Path txt = transcriber.run(job.id(), job.owner(), job.filePath());
             log.info("Транскрипция готова {}", txt);
             jobs.complete(job.id(), txt);
             // Разметка со временем — уже после complete: сегменты нужны сайту,
@@ -174,12 +177,31 @@ public class JobWorker {
             transcriptSegments.importFrom(job.id(), txt);
             notifiers.transcriptReady(job.id(), job.owner(), txt);
         } catch (Exception e) {
+            if (wasCancelled(job)) {
+                return;
+            }
             log.error("Ошибка транскрипции для файла: {}", job.filePath(), e);
             String message = "❌ Не удалось расшифровать файл. "
                     + "Возможно, он повреждён или в неподдерживаемом формате.";
             jobs.fail(job.id(), message);
             notifiers.failed(job.owner(), message);
         }
+    }
+
+    /**
+     * Не мы сломались — нас остановили.
+     *
+     * <p>Убитый процесс возвращает ненулевой код, и без этой проверки отмена
+     * выглядела бы поломкой: человек, нажавший «остановить», получал бы в ответ
+     * «не удалось расшифровать файл», а в журнале копились бы ошибки, которых
+     * не было. Состояние читается из базы: пометку туда ставит тот, кто отменил.</p>
+     */
+    private boolean wasCancelled(ProcessingJob job) {
+        if (!jobs.isCancelled(job.id())) {
+            return false;
+        }
+        log.info("Задача остановлена по просьбе владельца: jobId={}", job.shortId());
+        return true;
     }
 
     private void sleepQuietly() {

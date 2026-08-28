@@ -51,6 +51,15 @@ public final class Keyboards {
     public static final String CB_TOPIC_PREFIX = "top:";
 
     /**
+     * Кнопка «остановить» под сводкой задач: {@code cnl:<id задачи>}.
+     *
+     * <p>Отдельная кнопка на каждую задачу, а не одна на все: человек чаще
+     * хочет снять одну — ту, что запустил по ошибке, — а не всё, что стоит
+     * в очереди.</p>
+     */
+    public static final String CB_CANCEL_JOB_PREFIX = "cnl:";
+
+    /**
      * Подтверждение входа на сайт: {@code login:yes:<код>} и {@code login:no:<код>}.
      *
      * <p>Код — 22 символа, вместе с префиксом это 32 байта: лимит Telegram
@@ -60,6 +69,9 @@ public final class Keyboards {
 
     /** Подтверждение привязки чата к аккаунту: {@code link:yes:<код>} и {@code link:no:<код>}. */
     public static final String CB_LINK_PREFIX = "lnk:";
+
+    /** Сколько знаков названия влезает в кнопку, не превращая её в простыню. */
+    private static final int BUTTON_TITLE_LIMIT = 30;
 
     private Keyboards() {
     }
@@ -149,6 +161,36 @@ public final class Keyboards {
                 List.of(button("✅ Да, это мой аккаунт", CB_LINK_PREFIX + "yes:" + code)),
                 List.of(button("❌ Нет", CB_LINK_PREFIX + "no:" + code))
         );
+    }
+
+    /**
+     * Сводка задач: под каждой незавершённой — кнопка «остановить».
+     *
+     * <p>Подпись обрезается: в кнопку Telegram влезает немного, а имя файла с
+     * отметкой времени длиннее любой кнопки. Идентификатор при этом не
+     * страдает — он едет в {@code callback_data}, а не в подписи.</p>
+     */
+    public static InlineKeyboardMarkup activeJobs(List<Job> jobs) {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        for (Job job : jobs) {
+            rows.add(List.of(button("⛔ Остановить: " + shorten(job.title()),
+                    CB_CANCEL_JOB_PREFIX + job.id())));
+        }
+        rows.add(List.of(button("↩️ В меню", CB_CANCEL)));
+
+        InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+        markup.setKeyboard(rows);
+        return markup;
+    }
+
+    /** Задача в сводке — ровно то, что нужно кнопке. */
+    public record Job(String id, String title) {}
+
+    private static String shorten(String title) {
+        String clean = title == null ? "" : title.strip();
+        return clean.length() <= BUTTON_TITLE_LIMIT
+                ? clean
+                : clean.substring(0, BUTTON_TITLE_LIMIT - 1) + "…";
     }
 
     /** Показывается, пока бот ждёт ссылку: единственный осмысленный выход — отмена. */

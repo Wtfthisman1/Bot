@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.UUID;
 
 @Profile(Profiles.HOME)
@@ -55,6 +56,9 @@ public class QuotaService {
     @Value("${quota.zone:Europe/Moscow}")
     private String zoneId;
 
+    /** Что лимит не тратит: и поломка, и отмена — работа, которой не случилось. */
+    private static final List<JobState> NOT_COUNTED = List.of(JobState.FAILED, JobState.CANCELLED);
+
     private final JobRepository jobs;
     private final AccountService accounts;
 
@@ -67,8 +71,8 @@ public class QuotaService {
         Instant since = monthStart();
         long used = 0;
         for (Owner owner : accounts.ownersOf(accountId)) {
-            used += jobs.countByOwnerTypeAndOwnerIdAndDownloadIdIsNullAndStateNotAndCreatedAtGreaterThanEqual(
-                    owner.type(), owner.id(), JobState.FAILED, since);
+            used += jobs.countByOwnerTypeAndOwnerIdAndDownloadIdIsNullAndStateNotInAndCreatedAtGreaterThanEqual(
+                    owner.type(), owner.id(), NOT_COUNTED, since);
         }
         return new Quota(freePerMonth, used, false);
     }

@@ -3,6 +3,7 @@ package Bot.transcription;
 /**
  * Разметка Whisper превращается в сегменты в базе — с говорящими и без них.
  */
+import Bot.processing.RunningProcesses;
 import Bot.owner.Owner;
 import Bot.processing.JobRepository;
 import Bot.processing.JobStore;
@@ -28,7 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({PostgresTestContainer.class, TranscriptSegments.class, JobStore.class})
+@Import({PostgresTestContainer.class, TranscriptSegments.class, JobStore.class,
+        RunningProcesses.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class TranscriptSegmentsTest {
 

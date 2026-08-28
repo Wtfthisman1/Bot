@@ -37,6 +37,7 @@ public class JobStore {
     private static final List<JobState> UNFINISHED = List.of(JobState.QUEUED, JobState.RUNNING);
 
     private final JobRepository repository;
+    private final RunningProcesses processes;
 
     /** Ставит задачу в очередь. */
     @Transactional
@@ -129,6 +130,50 @@ public class JobStore {
         entity.setFinishedAt(Instant.now());
         entity.setUpdatedAt(Instant.now());
         log.debug("Задача помечена сорвавшейся: jobId={}", id.toString().substring(0, 8));
+    }
+
+    /**
+     * Останавливает задачу по просьбе владельца.
+     *
+     * <p>Чужую не тронет и доделанную не отменит: отменять можно только то, что
+     * ещё ждёт очереди или считается прямо сейчас. Запущенный процесс убивается
+     * следом — пометки в базе мало, Whisper досчитал бы запись до конца и всё
+     * это время держал бы видеокарту.</p>
+     *
+     * @return {@code true}, если задача и правда остановлена
+     */
+    @Transactional
+    public boolean cancel(UUID id, Owner owner) {
+        Optional<JobEntity> found = repository.findById(id)
+                .filter(entity -> entity.owner().equals(owner))
+                .filter(entity -> UNFINISHED.contains(entity.getState()));
+        if (found.isEmpty()) {
+            return false;
+        }
+
+        JobEntity entity = found.get();
+        entity.setState(JobState.CANCELLED);
+        entity.setFinishedAt(Instant.now());
+        entity.setUpdatedAt(Instant.now());
+        log.info("Задача отменена владельцем: jobId={}, была={}",
+                id.toString().substring(0, 8), entity.getStage());
+        processes.kill(id);
+        return true;
+    }
+
+    /** Остановлена ли задача — по этому воркер отличает отмену от поломки. */
+    @Transactional(readOnly = true)
+    public boolean isCancelled(UUID id) {
+        return repository.findById(id)
+                .map(entity -> entity.getState() == JobState.CANCELLED)
+                .orElse(false);
+    }
+
+    /** Незавершённые задачи владельца: их показывает «Статус», их же и отменяют. */
+    @Transactional(readOnly = true)
+    public List<JobEntity> unfinished(Owner owner) {
+        return repository.findByOwnerTypeAndOwnerIdAndStateInOrderByCreatedAtDesc(
+                owner.type(), owner.id(), UNFINISHED);
     }
 
     /**
