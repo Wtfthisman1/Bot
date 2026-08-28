@@ -13,6 +13,7 @@ package Bot.handler;
  */
 import Bot.handler.UserSessionService.Mode;
 import Bot.home.HomeApi;
+import Bot.insight.InsightKind;
 import Bot.owner.Owner;
 import Bot.processing.MediaKind;
 import Bot.telegram.Keyboards;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -127,9 +129,15 @@ public class CommandHandler {
 
                 ✨ <b>Выжимка</b> — кнопка под готовой расшифровкой.
                 Модель прочитает запись и перескажет, о чём она была, с метками
-                времени. Считается на той же видеокарте, что и расшифровки,
-                поэтому ответ приходит через несколько минут, отдельным
-                сообщением.
+                времени.
+
+                🔎 <b>По теме</b> — соседняя кнопка. Спросит, что искать, и
+                соберёт всё, что об этом говорили, — даже там, где тему не
+                называют прямо.
+
+                И то, и другое считается на той же видеокарте, что и
+                расшифровки, поэтому ответ приходит через несколько минут,
+                отдельным сообщением.
 
                 📦 <b>Ограничения:</b>
                 • До 20 МБ — можно прямо в чат
@@ -147,6 +155,44 @@ public class CommandHandler {
                 ⏱️ Обработка идёт в фоне: голосовое — 1–3 мин, видео — от 5 мин.
                 """;
         messageSender.sendMessageWithKeyboard(chatId, help.strip(), "HTML", Keyboards.mainMenu());
+    }
+
+    /**
+     * Просит тему для разбора уже готовой расшифровки.
+     *
+     * <p>Второй шаг, а не сразу заказ: тему невозможно уместить в кнопку — это
+     * произвольный текст, ради которого разбор и заведён. Расшифровка на это
+     * время лежит в состоянии диалога, как и отложенная ссылка.</p>
+     */
+    public void askTopic(long chatId, String jobId) {
+        sessionService.awaitTopic(chatId, jobId);
+        messageSender.sendMessageWithKeyboard(chatId,
+                "🔎 Что найти в этой записи?\n\n"
+                        + "Напишите тему одной строкой — например, «сроки и деньги». "
+                        + "Модель соберёт всё, что об этом говорили, даже там, где "
+                        + "тему не называют прямо.",
+                null, Keyboards.cancel());
+    }
+
+    /**
+     * Заказывает обработку расшифровки моделью.
+     *
+     * <p>Общий путь для кнопки «Выжимка» и для присланной темы: отказ и
+     * подтверждение должны звучать одинаково, откуда бы заказ ни пришёл.</p>
+     *
+     * <p>Текста ответа здесь не будет: модель считает минутами, и ждать её в
+     * обработчике нажатия нельзя. Готовое пришлёт дом отдельным сообщением.</p>
+     */
+    public void orderInsight(long chatId, String jobId, InsightKind kind, String topic) {
+        log.info("Заказана обработка из чата: chatId={}, jobId={}, вид={}", chatId, jobId, kind);
+        Optional<String> refusal = home.orderInsight(Owner.telegram(chatId), jobId, kind, topic);
+        if (refusal.isPresent()) {
+            showMenu(chatId, "🤷 " + refusal.get());
+            return;
+        }
+
+        showMenu(chatId, "%s Считаю. Пришлю сюда — на час записи уходит несколько минут."
+                .formatted(kind == InsightKind.SUMMARY ? "✨" : "🔎"));
     }
 
     /** Выдаёт одноразовую ссылку на форму загрузки. */

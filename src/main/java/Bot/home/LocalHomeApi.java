@@ -109,32 +109,32 @@ public class LocalHomeApi implements HomeApi {
     }
 
     /**
-     * Заказ выжимки из чата.
+     * Заказ обработки из чата.
      *
      * <p>Владелец сверяется по той же расшифровке, что ищут кнопки форматов:
-     * нашлась — задача его и уже посчитана, а значит, есть что пересказывать.
+     * нашлась — задача его и уже посчитана, а значит, есть что читать модели.
      * Нечитаемый id — не ошибка вызова, а кнопка из очень старого сообщения,
      * и ответ на неё такой же, как на чужую задачу.</p>
      */
     @Override
-    public Optional<String> summarize(Owner owner, String jobId) {
+    public Optional<String> orderInsight(Owner owner, String jobId, InsightKind kind, String topic) {
         UUID id;
         try {
             id = UUID.fromString(jobId);
         } catch (IllegalArgumentException e) {
-            log.warn("Неразбираемый идентификатор задачи в заказе выжимки: владелец={}", owner);
+            log.warn("Неразбираемый идентификатор задачи в заказе обработки: владелец={}", owner);
             return Optional.of("Эта расшифровка больше недоступна.");
         }
 
         if (jobStore.transcriptOf(id, owner).isEmpty()) {
-            log.info("Выжимка не по своей задаче: владелец={}, jobId={}", owner, id);
+            log.info("Обработка не по своей задаче: владелец={}, jobId={}", owner, id);
             return Optional.of("Эта расшифровка больше недоступна.");
         }
 
-        // Доля по умолчанию: в чате её выбирать нечем, а 15% — то же, что
+        // Доля не задаётся: в чате её выбирать нечем, а умолчание — то же, что
         // предлагает страница, и на живых записях выходит связный пересказ
         Long chatId = owner.isTelegram() ? owner.telegramChatId() : null;
-        return insights.order(id, InsightKind.SUMMARY, null, null, chatId);
+        return insights.order(id, kind, null, topic, chatId);
     }
 
     @Override

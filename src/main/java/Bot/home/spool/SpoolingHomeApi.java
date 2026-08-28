@@ -18,6 +18,7 @@ package Bot.home.spool;
  */
 import Bot.home.HomeApi;
 import Bot.home.HomeUnavailableException;
+import Bot.insight.InsightKind;
 import Bot.owner.Owner;
 import Bot.processing.MediaKind;
 import Bot.telegram.Keyboards;
@@ -227,13 +228,14 @@ public class SpoolingHomeApi implements HomeApi {
     }
 
     /**
-     * Откладывать нечего: выжимку считает дом по расшифровке, которая у него же
-     * и лежит. При спящей машине человек услышит «недоступно» — как и с
+     * Откладывать нечего: обработку считает дом по расшифровке, которая у него
+     * же и лежит. При спящей машине человек услышит «недоступно» — как и с
      * ссылкой на форму загрузки.
      */
     @Override
-    public java.util.Optional<String> summarize(Owner owner, String jobId) {
-        return delegate.summarize(owner, jobId);
+    public java.util.Optional<String> orderInsight(Owner owner, String jobId,
+                                                   InsightKind kind, String topic) {
+        return delegate.orderInsight(owner, jobId, kind, topic);
     }
 
     @Override

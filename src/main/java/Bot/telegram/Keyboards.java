@@ -39,13 +39,16 @@ public final class Keyboards {
     public static final String CB_TRANSCRIPT_PREFIX = "tr:";
 
     /**
-     * Кнопка «Выжимка» под готовой расшифровкой: {@code sum:<id расшифровки>}.
+     * Кнопки обработки под готовой расшифровкой: {@code sum:<id расшифровки>}
+     * и {@code top:<id расшифровки>}.
      *
-     * <p>Отдельный префикс, а не ещё один формат: форматы отдают уже готовый
+     * <p>Отдельные префиксы, а не ещё два формата: форматы отдают уже готовый
      * файл, а здесь заказывается счёт на видеокарте, и ответ придёт отдельным
-     * сообщением через несколько минут.</p>
+     * сообщением через несколько минут. Разбор к тому же сперва спрашивает
+     * тему — в кнопку её не уместить.</p>
      */
     public static final String CB_SUMMARY_PREFIX = "sum:";
+    public static final String CB_TOPIC_PREFIX = "top:";
 
     /**
      * Подтверждение входа на сайт: {@code login:yes:<код>} и {@code login:no:<код>}.
@@ -83,19 +86,20 @@ public final class Keyboards {
 
     /**
      * Что можно сделать с уже присланной расшифровкой: забрать в другом формате
-     * или попросить выжимку.
+     * или отдать её модели.
      *
      * <p>Кнопками, а не четырьмя файлами подряд: субтитры и Word нужны не
      * каждому, а засыпать чат вложениями после каждой транскрипции — плохой
      * обмен ради редкого случая.</p>
      *
-     * <p>Выжимка идёт отдельным рядом, ниже форматов: это единственная кнопка,
-     * которая не отдаёт готовое, а занимает видеокарту на минуты.</p>
+     * <p>Обработка идёт отдельным рядом, ниже форматов: эти кнопки не отдают
+     * готовое, а занимают видеокарту на минуты. Появляются и пропадают они
+     * вместе — обе упираются в одну и ту же модель.</p>
      *
-     * @param summary показывать ли выжимку — модели может не быть вовсе
+     * @param insights показывать ли обработку — модели может не быть вовсе
      */
     public static InlineKeyboardMarkup underTranscript(String id, List<TranscriptFormat> formats,
-                                                       boolean summary) {
+                                                       boolean insights) {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         // По две кнопки в ряд: подписи длинные, в один ряд Telegram их сожмёт
         for (int i = 0; i < formats.size(); i += 2) {
@@ -106,8 +110,9 @@ public final class Keyboards {
             }
             rows.add(row);
         }
-        if (summary) {
-            rows.add(List.of(button("✨ Выжимка", CB_SUMMARY_PREFIX + id)));
+        if (insights) {
+            rows.add(List.of(button("✨ Выжимка", CB_SUMMARY_PREFIX + id),
+                    button("🔎 По теме", CB_TOPIC_PREFIX + id)));
         }
 
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup();

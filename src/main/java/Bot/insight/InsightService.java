@@ -49,6 +49,9 @@ public class InsightService {
     /** Ниже этого выжимка перестаёт быть связным текстом даже у короткой записи. */
     private static final int MIN_WORDS = 60;
 
+    /** Столько же, сколько принимает поле темы на странице. */
+    private static final int MAX_TOPIC = 200;
+
     private static final List<JobState> PENDING = List.of(JobState.QUEUED, JobState.RUNNING);
 
     /**
@@ -147,6 +150,11 @@ public class InsightService {
         String question = topic == null ? "" : topic.strip();
         if (kind == InsightKind.TOPIC && question.isEmpty()) {
             return Optional.of("Напишите, что искать в записи.");
+        }
+        // Тема идёт в подсказку к каждому куску: длинная съедает окно модели,
+        // а из чата прислать можно и целую страницу текста
+        if (question.length() > MAX_TOPIC) {
+            return Optional.of("Тема слишком длинная — уложитесь в " + MAX_TOPIC + " знаков.");
         }
 
         InsightEntity insight = new InsightEntity();

@@ -8,6 +8,8 @@ package Bot.handler;
  *   <li>нажали кнопку → бот ждёт ссылку ({@link #awaitLink});</li>
  *   <li>прислали ссылку без кнопки → бот держит её и ждёт выбора действия
  *       ({@link #rememberUrl}).</li>
+ *   <li>нажали «Разбор по теме» под расшифровкой → бот ждёт саму тему
+ *       ({@link #awaitTopic}).</li>
  * </ul>
  *
  * <p>Для скачивания к действию добавляется вид медиа: аудио или видео. Выбор
@@ -40,24 +42,31 @@ public class UserSessionService {
     }
 
     /**
-     * Ровно одно из полей заполнено: либо ждём ссылку под выбранное действие,
-     * либо держим ссылку и ждём выбора действия.
+     * Ровно одно из полей заполнено: ждём ссылку под выбранное действие, держим
+     * ссылку до выбора действия или ждём тему для разбора уже готовой
+     * расшифровки.
      */
-    private record Session(Pending awaiting, String pendingUrl) {
+    private record Session(Pending awaiting, String pendingUrl, String topicJobId) {
     }
 
     private final Map<Long, Session> sessions = new ConcurrentHashMap<>();
 
     /** Действие выбрано — ждём ссылку. */
     public void awaitLink(long chatId, Mode mode, MediaKind media) {
-        sessions.put(chatId, new Session(new Pending(mode, media), null));
+        sessions.put(chatId, new Session(new Pending(mode, media), null, null));
         log.debug("Ожидание ссылки: chatId={}, mode={}, media={}", chatId, mode, media);
     }
 
     /** Ссылка пришла первой — держим её до выбора действия. */
     public void rememberUrl(long chatId, String url) {
-        sessions.put(chatId, new Session(null, url));
+        sessions.put(chatId, new Session(null, url, null));
         log.debug("Ссылка сохранена до выбора действия: chatId={}", chatId);
+    }
+
+    /** Нажат «Разбор по теме» — ждём, что именно искать в этой расшифровке. */
+    public void awaitTopic(long chatId, String jobId) {
+        sessions.put(chatId, new Session(null, null, jobId));
+        log.debug("Ожидание темы разбора: chatId={}, jobId={}", chatId, jobId);
     }
 
     /**
@@ -86,6 +95,21 @@ public class UserSessionService {
         }
         sessions.remove(chatId);
         return Optional.of(session.pendingUrl());
+    }
+
+    /**
+     * Забирает расшифровку, для которой ждали тему, и завершает шаг ожидания.
+     *
+     * <p>Пусто — бот темы не ждал, и присланный текст надо разбирать как
+     * обычно: ссылка это или просьба показать меню.</p>
+     */
+    public Optional<String> takeTopicJob(long chatId) {
+        Session session = sessions.get(chatId);
+        if (session == null || session.topicJobId() == null) {
+            return Optional.empty();
+        }
+        sessions.remove(chatId);
+        return Optional.of(session.topicJobId());
     }
 
     /** Ждёт ли бот сейчас ссылку от пользователя. */

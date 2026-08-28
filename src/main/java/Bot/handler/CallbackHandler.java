@@ -15,6 +15,7 @@ package Bot.handler;
 import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
 import Bot.home.HomeApi;
+import Bot.insight.InsightKind;
 import Bot.owner.Owner;
 import Bot.processing.MediaKind;
 import Bot.telegram.Keyboards;
@@ -24,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
+import java.util.function.Consumer;
 
 @Service
 @RequiredArgsConstructor
@@ -49,7 +51,14 @@ public class CallbackHandler {
         }
 
         if (callbackData.startsWith(Keyboards.CB_SUMMARY_PREFIX)) {
-            handleSummary(chatId, callbackData);
+            withTranscript(chatId, callbackData, Keyboards.CB_SUMMARY_PREFIX,
+                    jobId -> commandHandler.orderInsight(chatId, jobId, InsightKind.SUMMARY, null));
+            return;
+        }
+
+        if (callbackData.startsWith(Keyboards.CB_TOPIC_PREFIX)) {
+            withTranscript(chatId, callbackData, Keyboards.CB_TOPIC_PREFIX,
+                    jobId -> commandHandler.askTopic(chatId, jobId));
             return;
         }
 
@@ -174,29 +183,21 @@ public class CallbackHandler {
     }
 
     /**
-     * Разбирает {@code sum:<id>} — заказ выжимки по готовой расшифровке.
+     * Достаёт из кнопки расшифровку и передаёт её действию.
      *
-     * <p>Ответа с текстом здесь не будет: модель считает минутами, и держать
-     * всё это время нажатую кнопку нельзя. Бот подтверждает, что взял заказ, а
-     * готовое пришлёт дом отдельным сообщением, когда посчитает.</p>
+     * <p>Обе кнопки обработки несут в callback один и тот же хвост — id
+     * расшифровки, — и обе одинаково устаревают: сообщение могло быть прислано
+     * год назад. Пустой хвост означает именно это, и ответ на него общий.</p>
      */
-    private void handleSummary(long chatId, String callbackData) {
-        String jobId = callbackData.substring(Keyboards.CB_SUMMARY_PREFIX.length());
+    private void withTranscript(long chatId, String callbackData, String prefix,
+                                Consumer<String> action) {
+        String jobId = callbackData.substring(prefix.length());
         if (jobId.isBlank()) {
-            log.warn("Заказ выжимки без задачи: chatId={}, data='{}'", chatId, callbackData);
+            log.warn("Кнопка обработки без задачи: chatId={}, data='{}'", chatId, callbackData);
             commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
             return;
         }
-
-        log.info("Заказана выжимка: chatId={}, jobId={}", chatId, jobId);
-        Optional<String> refusal = home.summarize(Owner.telegram(chatId), jobId);
-        if (refusal.isPresent()) {
-            commandHandler.showMenu(chatId, "🤷 " + refusal.get());
-            return;
-        }
-
-        commandHandler.showMenu(chatId,
-                "✨ Считаю выжимку. Пришлю её сюда — на час записи уходит несколько минут.");
+        action.accept(jobId);
     }
 
     /**

@@ -39,12 +39,10 @@ public class InsightDelivery {
      * <p>Длину не проверяем — {@link MessageSender} режет текст на части сам.
      * Выжимка часовой записи в одно сообщение Telegram не влезает.</p>
      */
-    public void ready(long chatId, InsightKind kind, String text) {
+    public void ready(long chatId, InsightKind kind, String topic, String text) {
         log.info("Обработка уходит в чат: chatId={}, вид={}, символов={}",
                 chatId, kind, text.length());
-        // Заголовком идёт название вида, а не «выжимка готова»: у видов разный
-        // род, и одна фраза на оба звучала бы неряшливо
-        messageSender.sendMessage(chatId, "✨ %s\n\n%s".formatted(kind.title(), text));
+        messageSender.sendMessage(chatId, "%s\n\n%s".formatted(header(kind, topic), text));
     }
 
     /**
@@ -57,5 +55,18 @@ public class InsightDelivery {
         messageSender.sendMessageWithKeyboard(chatId,
                 "❌ %s: не вышло. %s".formatted(kind.title(), error),
                 null, Keyboards.mainMenu());
+    }
+
+    /**
+     * Строка над ответом: чем это было и, у разбора, о чём спрашивали.
+     *
+     * <p>Заголовок — название вида, а не «выжимка готова»: у видов разный род,
+     * и одна фраза на оба звучала бы неряшливо. Тема в заголовке нужна потому,
+     * что ответ приходит минутами позже вопроса, и к этому времени человек уже
+     * не помнит, о чём спрашивал.</p>
+     */
+    private static String header(InsightKind kind, String topic) {
+        String title = "%s %s".formatted(kind == InsightKind.SUMMARY ? "✨" : "🔎", kind.title());
+        return topic == null || topic.isBlank() ? title : "%s: «%s»".formatted(title, topic);
     }
 }

@@ -4,6 +4,7 @@ import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
 import Bot.processing.MediaKind;
 import Bot.home.HomeApi;
+import Bot.insight.InsightKind;
 import Bot.telegram.MessageSender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -94,5 +95,43 @@ class MessageHandlerTest {
 
         verify(urlActionService).start(eq(CHAT), eq(new Pending(Mode.TRANSCRIBE, MediaKind.AUDIO)),
                 anyList(), eq("Аня"));
+    }
+
+    /** Бот сам попросил тему — значит, весь ответ и есть тема. */
+    @Test
+    void awaitedTopicGoesStraightToTheModel() {
+        sessions.awaitTopic(CHAT, "job-1");
+
+        handler.handleText(CHAT, "сроки и деньги", "Аня");
+
+        verify(commandHandler).orderInsight(CHAT, "job-1", InsightKind.TOPIC, "сроки и деньги");
+        verifyNoInteractions(urlActionService);
+    }
+
+    /**
+     * Ссылка внутри темы — часть вопроса, а не задача: «что говорили про
+     * youtube.com» не должно превращаться в расшифровку.
+     */
+    @Test
+    void linkInsideTopicIsNotTakenForAJob() {
+        sessions.awaitTopic(CHAT, "job-1");
+
+        handler.handleText(CHAT, "что говорили про " + URL, "Аня");
+
+        verify(commandHandler).orderInsight(CHAT, "job-1", InsightKind.TOPIC,
+                "что говорили про " + URL);
+        verifyNoInteractions(urlActionService);
+    }
+
+    /** Тема забирается один раз: следующее сообщение — обычный текст. */
+    @Test
+    void topicIsAskedOnlyOnce() {
+        sessions.awaitTopic(CHAT, "job-1");
+
+        handler.handleText(CHAT, "сроки", "Аня");
+        handler.handleText(CHAT, "сроки", "Аня");
+
+        verify(commandHandler).orderInsight(CHAT, "job-1", InsightKind.TOPIC, "сроки");
+        verify(commandHandler).showMenu(eq(CHAT), any());
     }
 }

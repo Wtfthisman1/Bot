@@ -23,7 +23,7 @@ import Bot.home.HomeProtocol.LinkRequest;
 import Bot.home.HomeProtocol.LinkResponse;
 import Bot.home.HomeProtocol.OwnerRequest;
 import Bot.home.HomeProtocol.RefusalResponse;
-import Bot.home.HomeProtocol.SummaryRequest;
+import Bot.home.HomeProtocol.InsightRequest;
 import Bot.home.HomeProtocol.TelegramFileRequest;
 import Bot.home.HomeProtocol.TranscriptRequest;
 import Bot.owner.Owner;
@@ -97,10 +97,10 @@ public class HomeApiController {
         home.sendTranscript(request.owner(), request.jobId(), request.format());
     }
 
-    @PostMapping("/transcripts/summary")
-    public RefusalResponse summarize(@RequestBody SummaryRequest request) {
-        return new RefusalResponse(
-                home.summarize(request.owner(), request.jobId()).orElse(null));
+    @PostMapping("/transcripts/insight")
+    public RefusalResponse orderInsight(@RequestBody InsightRequest request) {
+        return new RefusalResponse(home.orderInsight(
+                request.owner(), request.jobId(), request.kind(), request.topic()).orElse(null));
     }
 
     @PostMapping("/accounts/bot-login")

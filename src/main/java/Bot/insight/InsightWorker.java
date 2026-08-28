@@ -102,7 +102,8 @@ public class InsightWorker {
             insights.complete(order.id(), text);
             log.info("Обработка готова за {} с: вид={}",
                     (System.currentTimeMillis() - startedAt) / 1000, order.kind());
-            answer(order, () -> delivery.ready(order.notifyChatId(), order.kind(), text));
+            answer(order, () -> delivery.ready(
+                    order.notifyChatId(), order.kind(), order.topic(), text));
         } catch (Exception e) {
             log.error("Не удалось обработать расшифровку: вид={}", order.kind(), e);
             String error = "Модель не справилась с этим текстом. Попробуйте ещё раз.";

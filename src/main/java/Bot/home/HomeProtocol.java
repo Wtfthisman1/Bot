@@ -12,6 +12,7 @@ package Bot.home;
  * {@code /download/} и {@code /upload/}, поэтому эти адреса физически не
  * видны из интернета — они ходят по WireGuard и защищены общим ключом.</p>
  */
+import Bot.insight.InsightKind;
 import Bot.owner.Owner;
 import Bot.processing.MediaKind;
 import Bot.transcription.TranscriptFormat;
@@ -30,7 +31,7 @@ public final class HomeProtocol {
     public static final String UPLOAD_LINK = ROOT + "/upload-links";
     public static final String STATUS = ROOT + "/status";
     public static final String TRANSCRIPT = ROOT + "/transcripts/send";
-    public static final String SUMMARY = ROOT + "/transcripts/summary";
+    public static final String INSIGHT = ROOT + "/transcripts/insight";
     public static final String LINK_ACCOUNT = ROOT + "/accounts/link";
     public static final String BOT_LOGIN = ROOT + "/accounts/bot-login";
 
@@ -47,8 +48,8 @@ public final class HomeProtocol {
 
     public record TranscriptRequest(Owner owner, String jobId, TranscriptFormat format) {}
 
-    /** Чья задача и какая — по ней и считается выжимка. */
-    public record SummaryRequest(Owner owner, String jobId) {}
+    /** Чья задача, какая и что с ней делать: пересказать или разобрать по теме. */
+    public record InsightRequest(Owner owner, String jobId, InsightKind kind, String topic) {}
 
     /**
      * Причина отказа, либо {@code null}, если заказ принят.

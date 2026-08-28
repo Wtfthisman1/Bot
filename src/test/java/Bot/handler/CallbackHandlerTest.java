@@ -4,6 +4,7 @@ import Bot.handler.UserSessionService.Mode;
 import Bot.handler.UserSessionService.Pending;
 import Bot.processing.MediaKind;
 import Bot.home.HomeApi;
+import Bot.insight.InsightKind;
 import Bot.owner.Owner;
 import Bot.telegram.Keyboards;
 import Bot.transcription.TranscriptFormat;
@@ -12,16 +13,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Optional;
-
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
 
 /**
  * Сценарий из ТЗ: кнопка → «пришлите ссылку», и обратный порядок —
@@ -165,37 +162,33 @@ class CallbackHandlerTest {
         verifyNoInteractions(home);
     }
 
-    /**
-     * Кнопка «Выжимка» заказывает счёт и сразу отвечает: текст придёт минутами
-     * позже, отдельным сообщением из дома.
-     */
+    /** Кнопка «Выжимка» заказывает счёт сразу: спрашивать больше нечего. */
     @Test
-    void summaryButtonOrdersItAndPromisesAnAnswer() {
-        when(home.summarize(Owner.telegram(CHAT), "abc123")).thenReturn(Optional.empty());
-
+    void summaryButtonOrdersItRightAway() {
         handler().handle(CHAT, Keyboards.CB_SUMMARY_PREFIX + "abc123", "Аня");
 
-        verify(home).summarize(Owner.telegram(CHAT), "abc123");
-        verify(commandHandler).showMenu(eq(CHAT), contains("Считаю выжимку"));
+        verify(commandHandler).orderInsight(CHAT, "abc123", InsightKind.SUMMARY, null);
     }
 
-    /** Отказ дома — это ответ человеку, а не молчание. */
+    /** Разбор по теме сперва спрашивает тему: в кнопку её не уместить. */
     @Test
-    void refusedSummaryIsExplained() {
-        when(home.summarize(Owner.telegram(CHAT), "abc123"))
-                .thenReturn(Optional.of("Предыдущая обработка ещё считается — дождитесь её."));
+    void topicButtonAsksWhatToLookFor() {
+        handler().handle(CHAT, Keyboards.CB_TOPIC_PREFIX + "abc123", "Аня");
 
-        handler().handle(CHAT, Keyboards.CB_SUMMARY_PREFIX + "abc123", "Аня");
-
-        verify(commandHandler).showMenu(eq(CHAT), contains("ещё считается"));
+        verify(commandHandler).askTopic(CHAT, "abc123");
+        verify(commandHandler, never()).orderInsight(anyLong(), any(), any(), any());
     }
 
     /** Кнопка без задачи — из очень старого сообщения: в дом за этим не ходим. */
     @Test
-    void summaryWithoutJobShowsMenu() {
-        handler().handle(CHAT, Keyboards.CB_SUMMARY_PREFIX, "Аня");
+    void insightButtonWithoutJobShowsMenu() {
+        CallbackHandler handler = handler();
 
-        verify(commandHandler).showMenu(eq(CHAT), any());
+        handler.handle(CHAT, Keyboards.CB_SUMMARY_PREFIX, "Аня");
+        handler.handle(CHAT, Keyboards.CB_TOPIC_PREFIX, "Аня");
+
+        verify(commandHandler, never()).orderInsight(anyLong(), any(), any(), any());
+        verify(commandHandler, never()).askTopic(anyLong(), any());
         verifyNoInteractions(home);
     }
 }

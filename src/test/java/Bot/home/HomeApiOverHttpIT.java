@@ -7,6 +7,7 @@ package Bot.home;
  * заголовок с ключом должны совпасть у двух сторон, которые после разделения
  * живут на разных машинах и обновляются по отдельности.</p>
  */
+import Bot.insight.InsightKind;
 import Bot.owner.Owner;
 import Bot.support.PostgresTestContainer;
 import org.junit.jupiter.api.Test;
@@ -72,15 +73,20 @@ class HomeApiOverHttpIT {
     }
 
     /**
-     * Заказ выжимки по чужой задаче: дом отказывает словами, а не пятисоткой.
+     * Заказ обработки по чужой задаче: дом отказывает словами, а не пятисоткой.
      *
-     * <p>Проверяется весь провод: тело запроса, адрес и обратный путь отказа.
-     * Задача здесь заведомо не наша — выдуманный id, — и это единственный
-     * отказ, который виден без живой модели.</p>
+     * <p>Проверяется весь провод: тело запроса вместе с видом обработки и темой,
+     * адрес и обратный путь отказа. Задача здесь заведомо не наша — выдуманный
+     * id, — и это единственный отказ, который виден без живой модели.</p>
      */
     @Test
-    void summaryOfAForeignJobIsRefusedInWords() {
-        assertThat(client("test-key").summarize(OWNER, UUID.randomUUID().toString()))
+    void insightOnAForeignJobIsRefusedInWords() {
+        HomeApi home = client("test-key");
+        String foreign = UUID.randomUUID().toString();
+
+        assertThat(home.orderInsight(OWNER, foreign, InsightKind.SUMMARY, null))
+                .get().asString().contains("недоступна");
+        assertThat(home.orderInsight(OWNER, foreign, InsightKind.TOPIC, "сроки"))
                 .get().asString().contains("недоступна");
     }
 

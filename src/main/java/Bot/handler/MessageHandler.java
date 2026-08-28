@@ -18,6 +18,7 @@ import Bot.home.HomeApi;
 import Bot.home.HomeApi.Acceptance;
 import Bot.home.HomeApi.TelegramFile;
 import Bot.home.HomeUnavailableException;
+import Bot.insight.InsightKind;
 import Bot.telegram.FileTooLargeException;
 import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
@@ -63,8 +64,19 @@ public class MessageHandler {
      *
      * <p>Ссылка проверяется раньше состояния ожидания — иначе присланная не в
      * тот момент ссылка трактовалась бы как «непонятный ответ».</p>
+     *
+     * <p>Исключение — тема разбора: её бот только что попросил сам, и весь
+     * текст ответа целиком и есть тема. Ссылку внутри неё искать нельзя, иначе
+     * вопрос «что говорили про youtube.com» превратился бы в расшифровку.</p>
      */
     public void handleText(long chatId, String text, String name) {
+        Optional<String> topicJob = sessionService.takeTopicJob(chatId);
+        if (topicJob.isPresent()) {
+            log.info("Получена тема разбора: chatId={}, длина={}", chatId, text.length());
+            commandHandler.orderInsight(chatId, topicJob.get(), InsightKind.TOPIC, text);
+            return;
+        }
+
         List<String> urls = extractUrls(text);
 
         if (urls.isEmpty()) {

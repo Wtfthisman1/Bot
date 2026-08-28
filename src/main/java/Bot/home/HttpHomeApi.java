@@ -25,9 +25,10 @@ import Bot.home.HomeProtocol.LinkRequest;
 import Bot.home.HomeProtocol.LinkResponse;
 import Bot.home.HomeProtocol.OwnerRequest;
 import Bot.home.HomeProtocol.RefusalResponse;
-import Bot.home.HomeProtocol.SummaryRequest;
+import Bot.home.HomeProtocol.InsightRequest;
 import Bot.home.HomeProtocol.TelegramFileRequest;
 import Bot.home.HomeProtocol.TranscriptRequest;
+import Bot.insight.InsightKind;
 import Bot.owner.Owner;
 import Bot.processing.MediaKind;
 import Bot.telegram.FileTooLargeException;
@@ -156,14 +157,14 @@ public class HttpHomeApi implements HomeApi {
 
     /**
      * Пустой ответ считается принятым заказом: так отвечает дом версии, где
-     * выжимки ещё не было. Половины обновляются по очереди, и молчание старого
-     * дома не должно выглядеть отказом.
+     * обработки текста ещё не было. Половины обновляются по очереди, и молчание
+     * старого дома не должно выглядеть отказом.
      */
     @Override
-    public Optional<String> summarize(Owner owner, String jobId) {
+    public Optional<String> orderInsight(Owner owner, String jobId, InsightKind kind, String topic) {
         RefusalResponse response = call(() -> client.post()
-                .uri(HomeProtocol.SUMMARY)
-                .body(new SummaryRequest(owner, jobId))
+                .uri(HomeProtocol.INSIGHT)
+                .body(new InsightRequest(owner, jobId, kind, topic))
                 .retrieve()
                 .body(RefusalResponse.class));
         return Optional.ofNullable(response).map(RefusalResponse::refusal);

@@ -164,6 +164,15 @@ class InsightServiceTest {
                 .get().asString().contains("что искать");
     }
 
+    /** Тема идёт в подсказку к каждому куску: длинная съедает окно модели. */
+    @Test
+    void tooLongTopicIsRefused() {
+        transcript("Раз.", "Два.");
+
+        assertThat(insights.order(jobId, InsightKind.TOPIC, null, "с".repeat(201)))
+                .get().asString().contains("слишком длинная");
+    }
+
     @Test
     void claimedOrderIsTakenOnlyOnce() {
         transcript("Раз.", "Два.");

@@ -17,6 +17,7 @@ package Bot.home;
  * посчитаются. Постановка задачи отвечает только тем, началась ли работа
  * прямо сейчас, — см. {@link Acceptance}.</p>
  */
+import Bot.insight.InsightKind;
 import Bot.owner.Owner;
 import Bot.processing.MediaKind;
 import Bot.transcription.TranscriptFormat;
@@ -59,19 +60,21 @@ public interface HomeApi {
     void sendTranscript(Owner owner, String jobId, TranscriptFormat format);
 
     /**
-     * Заказывает выжимку по готовой расшифровке.
+     * Заказывает обработку готовой расшифровки моделью: выжимку или разбор по
+     * заданной теме.
      *
      * <p>Считает дом: там и текст расшифровки, и видеокарта, и языковая модель.
-     * Ответа ждать нельзя — пересказ идёт минутами, — поэтому заказ ложится в
+     * Ответа ждать нельзя — счёт идёт минутами, — поэтому заказ ложится в
      * очередь, а готовое дом сам присылает в тот же чат.</p>
      *
      * <p>Чужую задачу заказать нельзя: {@code jobId} приходит из кнопки, а
      * кнопку можно переслать кому угодно. Владелец сверяется дома, там же, где
      * лежит сама задача.</p>
      *
+     * @param topic что искать в записи; нужен только разбору по теме
      * @return причина отказа для человека; пусто — заказ принят
      */
-    Optional<String> summarize(Owner owner, String jobId);
+    Optional<String> orderInsight(Owner owner, String jobId, InsightKind kind, String topic);
 
     /**
      * Привязывает чат к аккаунту сайта по коду из кабинета.

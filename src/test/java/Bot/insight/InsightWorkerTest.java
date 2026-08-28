@@ -52,7 +52,22 @@ class InsightWorkerTest {
         worker().process(order);
 
         verify(insights).complete(1, "Речь шла о сроках.");
-        verify(delivery).ready(CHAT, InsightKind.SUMMARY, "Речь шла о сроках.");
+        verify(delivery).ready(CHAT, InsightKind.SUMMARY, null, "Речь шла о сроках.");
+    }
+
+    /**
+     * У разбора в заголовке стоит сам вопрос: ответ приходит минутами позже, и
+     * к этому времени человек уже не помнит, о чём спрашивал.
+     */
+    @Test
+    void topicAnswerCarriesTheQuestion() throws InterruptedException {
+        InsightService.Order order = new InsightService.Order(
+                1, UUID.randomUUID(), InsightKind.TOPIC, null, "сроки", CHAT);
+        when(insights.compute(order)).thenReturn("Про сроки говорили дважды.");
+
+        worker().process(order);
+
+        verify(delivery).ready(CHAT, InsightKind.TOPIC, "сроки", "Про сроки говорили дважды.");
     }
 
     /** Заказ со страницы в чат не уходит: там его показывать некому. */
@@ -87,7 +102,7 @@ class InsightWorkerTest {
         InsightService.Order order = order(CHAT);
         when(insights.compute(order)).thenReturn("Речь шла о сроках.");
         doThrow(new RuntimeException("Telegram недоступен"))
-                .when(delivery).ready(anyLong(), any(), any());
+                .when(delivery).ready(anyLong(), any(), any(), any());
 
         worker().process(order);
 
