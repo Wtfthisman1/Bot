@@ -1,0 +1,26 @@
+# Разовый прогон резервной копии. Сам по себе не запускается — его дёргает
+# transcribot-backup.timer; руками полезно для проверки:
+#   sudo systemctl start transcribot-backup.service
+#   journalctl -u transcribot-backup -n 30
+#
+# Ставится скриптом deploy/home/setup-backup.sh — он подставляет сюда
+# фактический путь к репозиторию.
+
+[Unit]
+Description=Резервная копия Transcribot (база и тексты расшифровок)
+# База живёт в контейнере: без Docker снимать нечего. Requires не ставим —
+# скрипт сам скажет, что контейнер не поднят, и это будет видно в журнале
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/dmitry/IdeaProjects/Bot/deploy/home/backup.sh
+# Дамп идёт в /var/backups и ходит по ssh чужим ключом — нужен root
+User=root
+# 15 минут с запасом: база весит мегабайты, но при спящем диске первый
+# доступ бывает долгим
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=transcribot-backup
