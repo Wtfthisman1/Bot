@@ -56,6 +56,17 @@ public class QuotaService {
     @Value("${quota.zone:Europe/Moscow}")
     private String zoneId;
 
+    /**
+     * Чат владельца бота: его расшифровки лимит не тратят.
+     *
+     * <p>Ограничение существует, чтобы чужие люди не занимали видеокарту
+     * бесконечно. Видеокарта своя, электричество своё — считать три штуки в
+     * месяц самому себе бессмысленно. Раньше владелец считался наравне со
+     * всеми просто потому, что исключение никто не написал.</p>
+     */
+    @Value("${admin.chat.id:}")
+    private String adminChatId;
+
     /** Что лимит не тратит: и поломка, и отмена — работа, которой не случилось. */
     private static final List<JobState> NOT_COUNTED = List.of(JobState.FAILED, JobState.CANCELLED);
 
@@ -65,7 +76,7 @@ public class QuotaService {
     /** Остаток квоты аккаунта. */
     @Transactional
     public Quota of(UUID accountId) {
-        if (!enabled) {
+        if (!enabled || ownsTheBot(accountId)) {
             return Quota.disabled();
         }
         Instant since = monthStart();
@@ -105,6 +116,21 @@ public class QuotaService {
     }
 
     /* ───────── helpers ───────── */
+
+    /**
+     * Это аккаунт владельца бота?
+     *
+     * <p>Узнаётся по чату из {@code ADMIN_CHAT_ID} — тому же, куда приложение
+     * шлёт свои ошибки. Привязанный к этому чату аккаунт на сайте попадает под
+     * исключение вместе с ним: человек один, а входов у него несколько.</p>
+     */
+    private boolean ownsTheBot(UUID accountId) {
+        if (adminChatId == null || adminChatId.isBlank()) {
+            return false;
+        }
+        return accounts.ownersOf(accountId).stream()
+                .anyMatch(owner -> owner.isTelegram() && adminChatId.trim().equals(owner.id()));
+    }
 
     private UUID accountIdOf(Owner owner) {
         if (owner.isTelegram()) {
