@@ -15,11 +15,15 @@ Description=Transcribot — Telegram-бот расшифровки (Whisper + yt
 # Docker. Без неё бот не поднимется: в базе очередь задач.
 After=network-online.target wg-quick@wg0.service docker.service
 Wants=network-online.target docker.service
-# Три падения подряд за минуту — это не «не повезло», а сломанная конфигурация:
-# бесконечный цикл перезапусков только засорит журнал. Ключи живут в [Unit]:
-# в [Service] systemd их игнорирует.
-StartLimitBurst=3
-StartLimitIntervalSec=60
+# Ключи живут в [Unit]: в [Service] systemd их игнорирует.
+#
+# Было три попытки за минуту — «три падения подряд это сломанная конфигурация».
+# С привязкой к адресу туннеля (server.address) это стало вредным: wg0
+# поднимается не мгновенно, и служба сдавалась раньше, чем появлялся адрес, —
+# то есть не поднималась уже никогда. Десять попыток за десять минут по-прежнему
+# ловят сломанный конфиг, но переживают медленный старт сети.
+StartLimitBurst=10
+StartLimitIntervalSec=600
 
 [Service]
 Type=simple
@@ -44,6 +48,26 @@ Environment=HOME=/home/dmitry
 # у друга (в логах — 409 Conflict). Делается это drop-in-файлом, а не правкой
 # юнита: состояние конкретной машины не должно расходиться с репозиторием, а
 # откат — это удаление одного файла. Команда — в deploy/README.md, шаг 4.
+
+
+# ── Закалка. Смысл в том, чтобы выполнение чужого кода внутри приложения не
+# превращалось сразу во власть над машиной: без этих строк процесс видел всю
+# файловую систему ровно так же, как пользователь, от которого запущен.
+NoNewPrivileges=true
+PrivateTmp=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+# ProtectSystem=full, а не strict: при strict вся файловая система, включая
+# /home, становится только для чтения, и тогда пришлось бы перечислять в
+# ReadWritePaths не только upload и logs, но и кеш моделей Whisper, и каталог
+# deno. Ошибиться здесь — значит уронить расшифровку на середине уже в бою,
+# поэтому сначала так: /usr и /boot закрыты, дом остаётся рабочим.
+ProtectSystem=full
 
 Restart=always
 RestartSec=10

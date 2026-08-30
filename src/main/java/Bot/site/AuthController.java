@@ -42,11 +42,15 @@ public class AuthController {
     /** Ключ в сессии, под которым лежит начатый вход через бота. */
     private static final String BOT_LOGIN_CODE = "botLoginCode";
 
+    /** Число сверки — рядом с кодом и в той же сессии: его показывает страница. */
+    private static final String BOT_LOGIN_NUMBER = "botLoginNumber";
+
     /** Имя бота без «@» — виджет входа Telegram узнаёт бота по нему. */
     @Value("${bot.name:}")
     private String botName;
 
     private final AccountService accounts;
+    private final LoginAttempts attempts;
     private final BotLoginService botLogins;
     private final SessionLogin sessionLogin;
     private final TelegramLoginVerifier telegramLogin;
@@ -75,13 +79,23 @@ public class AuthController {
     @PostMapping("/login")
     public String login(@RequestParam String email, @RequestParam String password,
                         HttpServletRequest request, HttpServletResponse response, Model model) {
+        // Перебор пароля упирался только в скорость bcrypt: ни в приложении,
+        // ни в nginx ограничения не было
+        if (!attempts.allows(request)) {
+            fillLoginOptions(model);
+            model.addAttribute("error", attempts.refusal());
+            return "login";
+        }
+
         Optional<AccountService.Account> account = accounts.authenticate(email, password);
         if (account.isEmpty()) {
+            attempts.failed(request);
             fillLoginOptions(model);
             model.addAttribute("error", "Почта или пароль не подходят.");
             return "login";
         }
 
+        attempts.succeeded(request);
         sessionLogin.signIn(request, response, account.get());
         return "redirect:/cabinet";
     }
@@ -100,13 +114,21 @@ public class AuthController {
                            @RequestParam String password,
                            @RequestParam(required = false) String displayName,
                            HttpServletRequest request, HttpServletResponse response, Model model) {
+        // Регистрация без ограничения — это бесплатный конвейер аккаунтов,
+        // а с ними и бесплатных квот
+        if (!attempts.allows(request)) {
+            return registrationFailed(model, attempts.refusal());
+        }
+
         try {
             AccountService.Account account = accounts.register(email, password, displayName);
             sessionLogin.signIn(request, response, account);
             return "redirect:/cabinet";
         } catch (AccountService.EmailTakenException e) {
+            attempts.failed(request);
             return registrationFailed(model, "На эту почту аккаунт уже заведён. Попробуйте войти.");
         } catch (IllegalArgumentException e) {
+            attempts.failed(request);
             return registrationFailed(model, e.getMessage());
         }
     }
@@ -145,8 +167,9 @@ public class AuthController {
      */
     @PostMapping("/auth/bot")
     public String startBotLogin(HttpServletRequest request) {
-        String code = botLogins.issue();
-        request.getSession(true).setAttribute(BOT_LOGIN_CODE, code);
+        BotLoginService.Issued issued = botLogins.issue();
+        request.getSession(true).setAttribute(BOT_LOGIN_CODE, issued.code());
+        request.getSession(true).setAttribute(BOT_LOGIN_NUMBER, issued.checkNumber());
         return "redirect:/auth/bot/wait";
     }
 
@@ -169,6 +192,7 @@ public class AuthController {
         if (state == BotLoginService.State.CONFIRMED) {
             Optional<AccountService.Account> account = botLogins.claim(code);
             request.getSession(true).removeAttribute(BOT_LOGIN_CODE);
+            request.getSession(true).removeAttribute(BOT_LOGIN_NUMBER);
             if (account.isPresent()) {
                 sessionLogin.signIn(request, response, account.get());
                 return "redirect:/cabinet";
@@ -177,6 +201,7 @@ public class AuthController {
 
         if (state == BotLoginService.State.EXPIRED || state == BotLoginService.State.UNKNOWN) {
             request.getSession(true).removeAttribute(BOT_LOGIN_CODE);
+            request.getSession(true).removeAttribute(BOT_LOGIN_NUMBER);
             fillLoginOptions(model);
             model.addAttribute("error", "Время ожидания вышло. Начните вход заново.");
             return "login";
@@ -184,6 +209,7 @@ public class AuthController {
 
         model.addAttribute("botName", botName);
         model.addAttribute("code", code);
+        model.addAttribute("checkNumber", request.getSession(true).getAttribute(BOT_LOGIN_NUMBER));
         model.addAttribute("botLink", "https://t.me/" + botName + "?start=login_" + code);
         return "bot-login";
     }

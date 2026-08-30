@@ -30,7 +30,11 @@ public class BotConfig {
     public void logConfig() {
         log.info("=== Конфигурация бота ===");
         log.info("Bot Name: {}", botName);
-        log.info("Bot Token: {}", botToken != null ? botToken.substring(0, Math.min(10, botToken.length())) + "..." : "NULL");
+        // Только номер бота (часть до двоеточия) — он и так виден всем.
+        // Первые десять символов прихватывали и начало секрета
+        log.info("Bot Token: {}", botToken == null ? "NULL"
+                : botToken.contains(":") ? botToken.substring(0, botToken.indexOf(':')) + ":…"
+                : "задан");
         log.info("Admin Chat ID: {}", adminChatId);
         log.info("=========================");
     }

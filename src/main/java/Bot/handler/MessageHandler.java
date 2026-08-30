@@ -50,7 +50,12 @@ public class MessageHandler {
     private static final List<String> VIDEO_EXTENSIONS =
             List.of(".mp4", ".avi", ".mkv", ".mov", ".webm");
 
-    private final TaskExecutor taskExecutor;
+    /**
+     * Пул Spring Boot. Имя поля обязано совпадать с именем бина: в Boot 3.5
+     * {@code taskScheduler} тоже стал {@link TaskExecutor}, и выбор по типу
+     * перестал быть однозначным — см. {@code MessageSender}.
+     */
+    private final TaskExecutor applicationTaskExecutor;
     private final HomeApi home;
     private final MessageSender messageSender;
     private final UserSessionService sessionService;
@@ -175,7 +180,7 @@ public class MessageHandler {
         messageSender.sendChatAction(chatId, "typing");
         messageSender.sendMessage(chatId, ack);
 
-        taskExecutor.execute(() -> {
+        applicationTaskExecutor.execute(() -> {
             try {
                 Acceptance acceptance = home.transcribeTelegramFile(Owner.telegram(chatId), file);
                 if (acceptance.isDeferred()) {

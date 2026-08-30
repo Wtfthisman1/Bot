@@ -99,13 +99,26 @@ public interface HomeApi {
     Optional<String> linkTelegram(long chatId, String code);
 
     /**
+     * Числа для сверки: настоящее и два посторонних, вперемешку.
+     *
+     * <p>Бот показывает их кнопками, но не знает, какое верное, — это знает
+     * только дом. Пустой список означает «код не подошёл» без подробностей.</p>
+     */
+    java.util.List<Integer> loginChallenge(String code);
+
+    /**
      * Подтверждает вход на сайт по коду, показанному в браузере.
      *
      * <p>Коды живут дома вместе с аккаунтами, а кнопку нажимают в чате, то есть
-     * на стороне бота. Ответ {@code false} означает «код не подошёл» — неважно,
-     * неизвестен он, просрочен или уже сработал.</p>
+     * на стороне бота. Вместе с кодом едет выбранное человеком число: оно
+     * должно совпасть с тем, что показывает страница входа. Без этой сверки
+     * достаточно было прислать постороннему ссылку на бота, чтобы он нажал
+     * «Это я» и пустил отправителя в свой аккаунт.</p>
      */
-    boolean confirmBotLogin(long chatId, String code, String displayName);
+    LoginConfirmation confirmBotLogin(long chatId, String code, String displayName, int number);
+
+    /** Чем кончилось подтверждение входа: у каждого исхода свой ответ в чате. */
+    enum LoginConfirmation { CONFIRMED, WRONG_NUMBER, STALE }
 
     /**
      * Началась ли работа прямо сейчас.
@@ -130,7 +143,15 @@ public interface HomeApi {
          */
         QUOTA_EXCEEDED("🚫 Бесплатные расшифровки на этот месяц закончились.\n\n"
                 + "Новые появятся первого числа. Скачивание файлов работает "
-                + "по-прежнему — оно в лимит не входит.");
+                + "по-прежнему — оно в лимит не входит."),
+        /**
+         * Ссылка не ведёт на поддерживаемую платформу.
+         *
+         * <p>Отдельный исход, потому что решает его дом: проверка ссылки — это
+         * последний рубеж перед yt-dlp, и она обязана стоять там же, где
+         * ставится задача, а не только там, где её удобно спросить.</p>
+         */
+        UNSUPPORTED("❌ Не могу работать с этой ссылкой — она не с поддерживаемой площадки.");
 
         private final String userMessage;
 
@@ -148,7 +169,7 @@ public interface HomeApi {
         }
 
         public boolean isRejected() {
-            return this == QUOTA_EXCEEDED;
+            return this == QUOTA_EXCEEDED || this == UNSUPPORTED;
         }
 
         /**
@@ -159,6 +180,9 @@ public interface HomeApi {
         public Acceptance and(Acceptance other) {
             if (this == QUOTA_EXCEEDED || other == QUOTA_EXCEEDED) {
                 return QUOTA_EXCEEDED;
+            }
+            if (this == UNSUPPORTED || other == UNSUPPORTED) {
+                return UNSUPPORTED;
             }
             return this == DEFERRED || other == DEFERRED ? DEFERRED : STARTED;
         }

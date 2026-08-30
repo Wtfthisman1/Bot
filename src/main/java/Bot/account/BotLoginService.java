@@ -27,6 +27,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.Base64;
 import java.util.Optional;
 
@@ -53,9 +58,14 @@ public class BotLoginService {
     private final BotLoginCodeRepository codes;
     private final AccountService accounts;
 
-    /** Заводит код и возвращает его странице ожидания. */
+    /** Сколько чисел показывает бот и в каких пределах они лежат. */
+    private static final int CHOICES = 3;
+    private static final int NUMBER_MIN = 10;
+    private static final int NUMBER_BOUND = 90;   // 10..99
+
+    /** Заводит код и число сверки и возвращает их странице ожидания. */
     @Transactional
-    public String issue() {
+    public Issued issue() {
         byte[] bytes = new byte[CODE_BYTES];
         RANDOM.nextBytes(bytes);
 
@@ -63,11 +73,47 @@ public class BotLoginService {
         entity.setCode(ENCODER.encodeToString(bytes));
         entity.setCreatedAt(Instant.now());
         entity.setExpiresAt(Instant.now().plus(TTL));
+        entity.setCheckNumber(NUMBER_MIN + RANDOM.nextInt(NUMBER_BOUND));
         codes.save(entity);
 
         log.info("Выдан код входа через бота");
-        return entity.getCode();
+        return new Issued(entity.getCode(), entity.getCheckNumber());
     }
+
+    /**
+     * Числа для кнопок в боте: настоящее и два посторонних, в случайном порядке.
+     *
+     * <p>Считает их дом, а не бот: бот не должен знать, какое из трёх верное —
+     * он только показывает их и передаёт обратно выбранное.</p>
+     *
+     * <p>Пустой список — код неизвестен, просрочен или уже сработал. Для бота
+     * это один и тот же ответ, чтобы по разнице нельзя было проверять коды.</p>
+     */
+    @Transactional(readOnly = true)
+    public List<Integer> challengeFor(String code) {
+        Optional<BotLoginCodeEntity> found = codes.findById(code == null ? "" : code.trim());
+        if (found.isEmpty()) {
+            return List.of();
+        }
+        BotLoginCodeEntity entity = found.get();
+        if (entity.getUsedAt() != null || entity.getExpiresAt().isBefore(Instant.now())
+                || entity.getCheckNumber() == null) {
+            return List.of();
+        }
+
+        Set<Integer> numbers = new LinkedHashSet<>();
+        numbers.add(entity.getCheckNumber());
+        while (numbers.size() < CHOICES) {
+            numbers.add(NUMBER_MIN + RANDOM.nextInt(NUMBER_BOUND));
+        }
+
+        List<Integer> shuffled = new ArrayList<>(numbers);
+        Collections.shuffle(shuffled, RANDOM);
+        return shuffled;
+    }
+
+    /** Код и число, которое страница покажет человеку. */
+    public record Issued(String code, int checkNumber) {}
 
     /**
      * Подтверждение из чата: этот человек действительно входит на сайт.
@@ -76,25 +122,37 @@ public class BotLoginService {
      *         для бота это один и тот же ответ «код не подошёл»
      */
     @Transactional
-    public boolean confirm(long chatId, String code, String displayName) {
+    public Confirmation confirm(long chatId, String code, String displayName, int chosenNumber) {
         Optional<BotLoginCodeEntity> found = codes.findById(code == null ? "" : code.trim());
         if (found.isEmpty()) {
             log.info("Подтверждение входа с неизвестным кодом: chatId={}", chatId);
-            return false;
+            return Confirmation.STALE;
         }
 
         BotLoginCodeEntity entity = found.get();
         if (entity.getUsedAt() != null || entity.getExpiresAt().isBefore(Instant.now())) {
             log.info("Подтверждение входа по просроченному коду: chatId={}", chatId);
-            return false;
+            return Confirmation.STALE;
+        }
+
+        // Не то число — код гасится немедленно. Ошибиться может и свой, но
+        // куда вероятнее, что человеку прислали чужую ссылку и сверять ему не
+        // с чем: дать вторую попытку значило бы дать её именно этому случаю
+        if (entity.getCheckNumber() != null && entity.getCheckNumber() != chosenNumber) {
+            entity.setUsedAt(Instant.now());
+            log.warn("Вход через бота отклонён: число не совпало, код погашен (chatId={})", chatId);
+            return Confirmation.WRONG_NUMBER;
         }
 
         entity.setChatId(chatId);
         entity.setDisplayName(displayName);
         entity.setConfirmedAt(Instant.now());
         log.info("Вход через бота подтверждён: chatId={}", chatId);
-        return true;
+        return Confirmation.CONFIRMED;
     }
+
+    /** Чем кончилось подтверждение — у каждого исхода свой текст в чате. */
+    public enum Confirmation { CONFIRMED, WRONG_NUMBER, STALE }
 
     /** Что сейчас с кодом — на это смотрит страница ожидания. */
     @Transactional(readOnly = true)

@@ -32,7 +32,17 @@ public class MessageSender {
     /** Жёсткий лимит Telegram — 4096. Берём запас под мультибайтные символы и разметку. */
     private static final int CHUNK_LIMIT = 4000;
 
-    private final TaskExecutor taskExecutor;
+    /**
+     * Пул Spring Boot, а не любой попавшийся.
+     *
+     * <p>Имя поля совпадает с именем бина не для красоты: в Boot 3.5
+     * планировщик {@code taskScheduler} тоже стал {@link TaskExecutor}, выбор
+     * по типу перестал быть однозначным и контекст не поднимался вовсе. По
+     * неоднозначному типу Spring выбирает бин с именем параметра — а
+     * {@code @Qualifier} тут не помог бы: Lombok не переносит его из поля в
+     * конструктор без отдельной настройки.</p>
+     */
+    private final TaskExecutor applicationTaskExecutor;
     private final TelegramApi telegram;
 
     /**
@@ -50,7 +60,7 @@ public class MessageSender {
     public void sendMessage(long chatId, String text, String parseMode) {
         List<String> parts = splitMessage(text);
 
-        taskExecutor.execute(() -> {
+        applicationTaskExecutor.execute(() -> {
             for (String part : parts) {
                 SendMessage msg = SendMessage.builder()
                         .chatId(String.valueOf(chatId))
@@ -74,7 +84,7 @@ public class MessageSender {
      * Отправляет транскрипцию как документ
      */
     public void sendTranscript(long chatId, Path txt, InlineKeyboardMarkup keyboard) {
-        taskExecutor.execute(() -> {
+        applicationTaskExecutor.execute(() -> {
             try {
                 SendDocument document = SendDocument.builder()
                         .chatId(String.valueOf(chatId))
@@ -99,7 +109,7 @@ public class MessageSender {
      * {@code onFailure}, чтобы вызывающий код мог отправить ссылку.</p>
      */
     public void sendFile(long chatId, Path file, String caption, Runnable onFailure) {
-        taskExecutor.execute(() -> {
+        applicationTaskExecutor.execute(() -> {
             try {
                 sendChatActionSync(chatId, "upload_document");
                 telegram.execute(SendDocument.builder()
@@ -135,7 +145,7 @@ public class MessageSender {
     public void sendMessageWithKeyboard(long chatId, String text, String parseMode, InlineKeyboardMarkup keyboard) {
         List<String> parts = splitMessage(text);
 
-        taskExecutor.execute(() -> {
+        applicationTaskExecutor.execute(() -> {
             for (int i = 0; i < parts.size(); i++) {
                 SendMessage msg = SendMessage.builder()
                         .chatId(String.valueOf(chatId))
@@ -160,7 +170,7 @@ public class MessageSender {
      * Показывает действие пользователя (typing, upload_document и т. п.)
      */
     public void sendChatAction(long chatId, String action) {
-        taskExecutor.execute(() -> {
+        applicationTaskExecutor.execute(() -> {
             try {
                 telegram.execute(SendChatAction.builder()
                         .chatId(String.valueOf(chatId))

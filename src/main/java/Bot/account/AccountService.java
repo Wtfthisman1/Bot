@@ -53,6 +53,13 @@ public class AccountService {
     private static final int LINK_CODE_LENGTH = 6;
     private static final SecureRandom RANDOM = new SecureRandom();
 
+    /**
+     * Форма адреса. Без неё в базу ложилась любая непустая строка: подтверждения
+     * почты у нас нет, и хотя бы форму проверить стоит.
+     */
+    private static final java.util.regex.Pattern EMAIL =
+            java.util.regex.Pattern.compile("[^@\\s]+@[^@\\s.]+(\\.[^@\\s.]+)+");
+
     private final AccountRepository repository;
     private final AccountIdentityRepository identities;
     private final LinkCodeRepository linkCodes;
@@ -62,6 +69,16 @@ public class AccountService {
      * железа злоумышленника — в отличие от обычных хеш-функций.
      */
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    /**
+     * Хеш, с которым сверяется пароль для несуществующей почты.
+     *
+     * <p>Считается один раз на старте: смысл в том, чтобы сравнение заняло
+     * столько же времени, сколько настоящее, а не в том, какой именно пароль
+     * за ним стоит.</p>
+     */
+    private static final String DUMMY_HASH =
+            new BCryptPasswordEncoder().encode("нет такого пароля");
 
     /* ───────── почта и пароль ───────── */
 
@@ -74,6 +91,12 @@ public class AccountService {
     @Transactional
     public Account register(String email, String rawPassword, String displayName) {
         String normalized = normalize(email);
+        // Форму проверяем только здесь, при заведении адреса. Во входе и в
+        // ответе Google бросок исключения превратил бы кривой ввод в пятисотку
+        // вместо внятного отказа
+        if (!EMAIL.matcher(normalized).matches()) {
+            throw new IllegalArgumentException("Это не похоже на адрес почты");
+        }
         if (rawPassword == null || rawPassword.length() < MIN_PASSWORD_LENGTH) {
             throw new IllegalArgumentException(
                     "Пароль должен быть не короче " + MIN_PASSWORD_LENGTH + " символов");
@@ -99,10 +122,24 @@ public class AccountService {
      */
     @Transactional
     public Optional<Account> authenticate(String email, String rawPassword) {
+        // Пустая почта — это отказ, а не пятисотка: форму отправляют и пустой
+        if (email == null || email.isBlank()) {
+            return Optional.empty();
+        }
         Optional<AccountEntity> found = repository.findByEmail(normalize(email));
+
+        // Хеш всегда считается — даже когда считать нечего. Раньше короткое
+        // замыкание пропускало bcrypt для незнакомой почты, и ответ приходил
+        // мгновенно вместо сотни миллисекунд: текст отказа был одинаковым, а
+        // время ответа выдавало, какие адреса зарегистрированы
+        String hash = found.map(AccountEntity::getPasswordHash).orElse(DUMMY_HASH);
+        boolean matches = passwordEncoder.matches(
+                rawPassword == null ? "" : rawPassword,
+                hash == null ? DUMMY_HASH : hash);
+
         if (found.isEmpty() || rawPassword == null
                 || found.get().getPasswordHash() == null
-                || !passwordEncoder.matches(rawPassword, found.get().getPasswordHash())) {
+                || !matches) {
             log.debug("Неудачная попытка входа: {}", normalize(email));
             return Optional.empty();
         }

@@ -23,6 +23,7 @@ import Bot.download.DownloadService;
 import Bot.insight.InsightKind;
 import Bot.insight.InsightService;
 import Bot.owner.Owner;
+import Bot.service.SupportedPlatforms;
 import Bot.processing.JobEntity;
 import Bot.processing.JobState;
 import Bot.processing.JobStore;
@@ -58,9 +59,17 @@ public class LocalHomeApi implements HomeApi {
     private final TelegramFileDownloader fileDownloader;
     private final TranscriptDeliveryService transcriptDelivery;
     private final InsightService insights;
+    private final SupportedPlatforms supportedPlatforms;
 
     @Override
     public Acceptance transcribeLink(Owner owner, String url) {
+        // Последний рубеж перед yt-dlp, а не удобство: до этой проверки форма
+        // загрузки ставила задачу по любому адресу, минуя SupportedPlatforms,
+        // и в yt-dlp уезжала произвольная строка
+        if (!supportedPlatforms.isSupported(url)) {
+            log.warn("Отклонена неподдерживаемая ссылка на расшифровку: владелец={}", owner);
+            return Acceptance.UNSUPPORTED;
+        }
         if (!quotas.allows(owner)) {
             return Acceptance.QUOTA_EXCEEDED;
         }
@@ -70,6 +79,12 @@ public class LocalHomeApi implements HomeApi {
 
     @Override
     public Acceptance downloadLink(Owner owner, String url, MediaKind media) {
+        // Проверка и здесь: раньше метод отвечал «запущено» даже тогда, когда
+        // DownloadService ссылку отвергал, и человек получал два разных ответа
+        if (!supportedPlatforms.isSupported(url)) {
+            log.warn("Отклонена неподдерживаемая ссылка на скачивание: владелец={}", owner);
+            return Acceptance.UNSUPPORTED;
+        }
         downloadService.createDownloadTask(owner, url, media);
         return Acceptance.STARTED;
     }
@@ -176,8 +191,18 @@ public class LocalHomeApi implements HomeApi {
     }
 
     @Override
-    public boolean confirmBotLogin(long chatId, String code, String displayName) {
-        return botLogins.confirm(chatId, code, displayName);
+    public java.util.List<Integer> loginChallenge(String code) {
+        return botLogins.challengeFor(code);
+    }
+
+    @Override
+    public LoginConfirmation confirmBotLogin(long chatId, String code, String displayName,
+                                             int number) {
+        return switch (botLogins.confirm(chatId, code, displayName, number)) {
+            case CONFIRMED -> LoginConfirmation.CONFIRMED;
+            case WRONG_NUMBER -> LoginConfirmation.WRONG_NUMBER;
+            case STALE -> LoginConfirmation.STALE;
+        };
     }
 
     @Override

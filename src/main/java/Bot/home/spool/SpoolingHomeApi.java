@@ -257,8 +257,14 @@ public class SpoolingHomeApi implements HomeApi {
     }
 
     @Override
-    public boolean confirmBotLogin(long chatId, String code, String displayName) {
-        return delegate.confirmBotLogin(chatId, code, displayName);
+    public java.util.List<Integer> loginChallenge(String code) {
+        return delegate.loginChallenge(code);
+    }
+
+    @Override
+    public LoginConfirmation confirmBotLogin(long chatId, String code, String displayName,
+                                             int number) {
+        return delegate.confirmBotLogin(chatId, code, displayName, number);
     }
 
     /* ───────── helpers ───────── */

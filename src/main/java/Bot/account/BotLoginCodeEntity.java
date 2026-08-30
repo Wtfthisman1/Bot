@@ -44,4 +44,14 @@ public class BotLoginCodeEntity {
 
     @Column(name = "used_at")
     private Instant usedAt;
+
+    /**
+     * Двузначное число, которое видит страница входа.
+     *
+     * <p>Бот предлагает его среди трёх — совпасть должно то, что на экране.
+     * Так подтверждение перестаёт быть просто нажатием кнопки: у того, кто
+     * страницы не открывал, сверять не с чем.</p>
+     */
+    @Column(name = "check_number")
+    private Integer checkNumber;
 }

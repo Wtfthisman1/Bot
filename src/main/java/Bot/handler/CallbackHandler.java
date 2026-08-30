@@ -104,11 +104,16 @@ public class CallbackHandler {
     }
 
     /**
-     * Разбирает {@code login:yes|no:<код>} — ответ на просьбу подтвердить вход.
+     * Разбирает {@code login:<число>|no:<код>} — ответ на просьбу подтвердить вход.
      *
-     * <p>Отказ ничего не делает намеренно: код просто остаётся неподтверждённым
-     * и через несколько минут протухнет сам. Гасить его по «Это не я» значило бы
-     * дать постороннему способ мешать чужому входу.</p>
+     * <p>Вместо «да» приходит выбранное человеком число: подтверждает вход не
+     * нажатие кнопки, а совпадение с тем, что показано на странице. Кто ссылку
+     * получил, но страницы не открывал, сверять не с чем — и это единственная
+     * защита, которая работает без внимательного чтения предупреждений.</p>
+     *
+     * <p>Отказ по «Это не я» ничего не гасит намеренно: код протухнет сам, а
+     * гашение дало бы постороннему способ мешать чужому входу. Промах по числу —
+     * другое дело: там код гасится, и это решает дом.</p>
      */
     private void handleLoginConfirmation(long chatId, String callbackData, String userName) {
         String[] parts = callbackData.split(":", 3);
@@ -118,7 +123,7 @@ public class CallbackHandler {
             return;
         }
 
-        if (!"yes".equals(parts[1])) {
+        if ("no".equals(parts[1])) {
             log.info("Вход на сайт отклонён из чата: chatId={}", chatId);
             commandHandler.showMenu(chatId,
                     "👌 Понял, вход не подтверждаю. Если ссылку прислал кто-то другой — "
@@ -126,13 +131,27 @@ public class CallbackHandler {
             return;
         }
 
+        int number;
         try {
-            if (home.confirmBotLogin(chatId, parts[2], userName)) {
-                commandHandler.showMenu(chatId,
+            number = Integer.parseInt(parts[1]);
+        } catch (NumberFormatException e) {
+            log.warn("Неразбираемое число в подтверждении входа: chatId={}", chatId);
+            commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
+            return;
+        }
+
+        try {
+            switch (home.confirmBotLogin(chatId, parts[2], userName, number)) {
+                case CONFIRMED -> commandHandler.showMenu(chatId,
                         "✅ Вход подтверждён. Возвращайтесь на вкладку с сайтом — "
                                 + "она откроет кабинет сама.");
-            } else {
-                commandHandler.showMenu(chatId,
+                case WRONG_NUMBER -> commandHandler.showMenu(chatId,
+                        "🛑 Число не совпало, вход отменён.\n\n"
+                                + "Если вы входили сами — откройте страницу входа заново и "
+                                + "выберите то число, которое на ней показано. Если страницу "
+                                + "вы не открывали, значит ссылку прислал посторонний: "
+                                + "он пытался войти в ваш аккаунт, и у него не вышло.");
+                case STALE -> commandHandler.showMenu(chatId,
                         "🕓 Код устарел или уже сработал. Откройте страницу входа заново.");
             }
         } catch (Exception e) {

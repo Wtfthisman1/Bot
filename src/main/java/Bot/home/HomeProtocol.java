@@ -35,6 +35,8 @@ public final class HomeProtocol {
     public static final String CANCEL = ROOT + "/jobs/cancel";
     public static final String LINK_ACCOUNT = ROOT + "/accounts/link";
     public static final String BOT_LOGIN = ROOT + "/accounts/bot-login";
+    /** Числа для сверки: бот спрашивает их до того, как показать кнопки. */
+    public static final String BOT_LOGIN_CHALLENGE = ROOT + "/accounts/bot-login/challenge";
 
     private HomeProtocol() {
     }
@@ -73,11 +75,22 @@ public final class HomeProtocol {
     /** Имя аккаунта, либо {@code null}, если код не подошёл. */
     public record LinkAccountResponse(String title) {}
 
-    /** Подтверждение входа на сайт: код из браузера и чат, который его подтвердил. */
-    public record BotLoginRequest(long chatId, String code, String displayName) {}
+    /**
+     * Подтверждение входа на сайт: код из браузера, чат и выбранное число.
+     *
+     * <p>Число обязательно: оно и отличает «человек смотрит на ту же страницу»
+     * от «человеку прислали ссылку».</p>
+     */
+    public record BotLoginRequest(long chatId, String code, String displayName, int number) {}
 
-    /** Подошёл ли код. */
-    public record BotLoginResponse(boolean confirmed) {}
+    /** Чем кончилось: подошёл, не совпало число, или код уже не годен. */
+    public record BotLoginResponse(String outcome) {}
+
+    /** Запрос чисел для сверки по коду. */
+    public record LoginChallengeRequest(String code) {}
+
+    /** Числа для кнопок, вперемешку. Пусто — код не подошёл. */
+    public record LoginChallengeResponse(java.util.List<Integer> numbers) {}
 
     /** Ссылка на форму загрузки — единственный ответ, который нужен сразу. */
     public record LinkResponse(String link) {}

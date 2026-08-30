@@ -29,6 +29,27 @@ EnvironmentFile=/etc/transcribot/bot.env
 # памяти машины и упрётся в OOM killer в первый же час.
 ExecStart=/usr/bin/java -Xmx320m -XX:MaxMetaspaceSize=192m -jar /opt/transcribot/bot.jar
 
+
+# ── Закалка. Смысл в том, чтобы выполнение чужого кода внутри приложения не
+# превращалось сразу во власть над машиной: без этих строк процесс видел всю
+# файловую систему ровно так же, как пользователь, от которого запущен.
+NoNewPrivileges=true
+PrivateTmp=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+# На VPS у приложения нет ни файлов пользователя, ни видеокарты: писать оно
+# должно только в свой каталог — спул и журнал. Всё остальное только на чтение.
+# Каталог целиком, а не два подкаталога: logback заводит файлы сам, и забытый
+# путь означал бы службу, которая не пишет журнал ровно тогда, когда он нужен.
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/transcribot
+
 Restart=always
 RestartSec=10
 

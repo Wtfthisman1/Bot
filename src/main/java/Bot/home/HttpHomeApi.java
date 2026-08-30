@@ -133,13 +133,35 @@ public class HttpHomeApi implements HomeApi {
     }
 
     @Override
-    public boolean confirmBotLogin(long chatId, String code, String displayName) {
+    public java.util.List<Integer> loginChallenge(String code) {
+        HomeProtocol.LoginChallengeResponse response = call(() -> client.post()
+                .uri(HomeProtocol.BOT_LOGIN_CHALLENGE)
+                .body(new HomeProtocol.LoginChallengeRequest(code))
+                .retrieve()
+                .body(HomeProtocol.LoginChallengeResponse.class));
+        return response == null || response.numbers() == null
+                ? java.util.List.of() : response.numbers();
+    }
+
+    @Override
+    public LoginConfirmation confirmBotLogin(long chatId, String code, String displayName,
+                                             int number) {
         BotLoginResponse response = call(() -> client.post()
                 .uri(HomeProtocol.BOT_LOGIN)
-                .body(new BotLoginRequest(chatId, code, displayName))
+                .body(new BotLoginRequest(chatId, code, displayName, number))
                 .retrieve()
                 .body(BotLoginResponse.class));
-        return response != null && response.confirmed();
+        // Неизвестный дом — неизвестный исход: считаем код негодным, а не
+        // подтверждённым. Ошибаться тут можно только в сторону отказа
+        if (response == null || response.outcome() == null) {
+            return LoginConfirmation.STALE;
+        }
+        try {
+            return LoginConfirmation.valueOf(response.outcome());
+        } catch (IllegalArgumentException e) {
+            log.warn("Дом ответил неизвестным исходом входа: {}", response.outcome());
+            return LoginConfirmation.STALE;
+        }
     }
 
     @Override

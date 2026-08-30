@@ -184,7 +184,11 @@ class SiteAccessIT {
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("t.me/")));
 
         String code = (String) session.getAttribute("botLoginCode");
-        assertThat(botLogins.confirm(4242L, code, "Аня")).isTrue();
+        // Число берём из той же сессии: именно его показывает страница, и
+        // именно совпадение с ним подтверждает вход
+        int number = (Integer) session.getAttribute("botLoginNumber");
+        assertThat(botLogins.confirm(4242L, code, "Аня", number))
+                .isEqualTo(Bot.account.BotLoginService.Confirmation.CONFIRMED);
 
         mvc.perform(get("/auth/bot/wait").session(session))
                 .andExpect(redirectedUrl("/cabinet"));

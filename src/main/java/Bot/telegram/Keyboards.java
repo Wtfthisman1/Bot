@@ -143,9 +143,14 @@ public final class Keyboards {
      * <p>Две кнопки, а не одна: человек мог открыть чужую ссылку, и «Это не я»
      * должно быть таким же простым действием, как согласие.</p>
      */
-    public static InlineKeyboardMarkup loginConfirm(String code) {
+    public static InlineKeyboardMarkup loginConfirm(String code, List<Integer> numbers) {
+        // Числа в один ряд, отказ — отдельной строкой ниже: «Это не я» не должно
+        // оказаться под пальцем рядом с тем, что нажимают не глядя
+        List<InlineKeyboardButton> choices = numbers.stream()
+                .map(number -> button(String.valueOf(number), CB_LOGIN_PREFIX + number + ":" + code))
+                .toList();
         return keyboard(
-                List.of(button("✅ Это я, войти", CB_LOGIN_PREFIX + "yes:" + code)),
+                choices,
                 List.of(button("❌ Это не я", CB_LOGIN_PREFIX + "no:" + code))
         );
     }

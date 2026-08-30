@@ -7,6 +7,7 @@ import Bot.owner.Owner;
 import Bot.processing.JobStore;
 import Bot.processing.ProcessingJob;
 import Bot.service.StorageManager;
+import Bot.service.SupportedPlatforms;
 import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
 import lombok.RequiredArgsConstructor;
@@ -48,6 +49,7 @@ public class UploadController {
     private final StorageManager storageManager;
     private final QuotaService   quotas;
     private final MessageSender  messageSender;
+    private final SupportedPlatforms supportedPlatforms;
 
 
     /* ---------- отдаём форму ---------- */
@@ -114,15 +116,28 @@ public class UploadController {
                     .body("Максимум " + MAX_SLOTS + " файлов и " + MAX_SLOTS + " ссылок за раз.");
         }
 
+        int acceptedFiles = 0;
+        int acceptedUrls = 0;
+        int overQuota = 0;
+        int unsupported = 0;
+
         /* ---------- 2. файлы ---------- */
         if (files != null) {
             for (MultipartFile f : files) {
                 if (f == null || f.isEmpty()) continue;
+                // Квота спрашивается на каждую задачу, а не один раз на запрос:
+                // одной проверки хватало на пять файлов и пять ссылок разом,
+                // то есть лимит в три расшифровки давал десять
+                if (!quotas.allows(owner)) {
+                    overQuota++;
+                    continue;
+                }
                 Path dst = storageManager.uploadedPath(owner, f.getOriginalFilename());
                 log.info("Принят файл через форму: владелец={}, имя='{}', размер={} байт",
                         owner, f.getOriginalFilename(), f.getSize());
                 f.transferTo(dst);                                     // сохраняем
                 jobStore.enqueue(ProcessingJob.newFile(owner, dst));   // сразу в очередь
+                acceptedFiles++;
             }
         }
 
@@ -130,13 +145,54 @@ public class UploadController {
         if (urls != null) {
             for (String u : urls) {
                 if (u == null || u.isBlank()) continue;
-                jobStore.enqueue(ProcessingJob.newLink(owner, u.trim()));
+                String link = u.trim();
+                // Проверка площадки: без неё форма ставила задачу по любому
+                // адресу, и в yt-dlp уезжала произвольная строка — и как цель
+                // запроса с домашней машины, и как аргумент командной строки
+                if (!supportedPlatforms.isSupported(link)) {
+                    log.warn("Отклонена неподдерживаемая ссылка из формы: владелец={}", owner);
+                    unsupported++;
+                    continue;
+                }
+                if (!quotas.allows(owner)) {
+                    overQuota++;
+                    continue;
+                }
+                jobStore.enqueue(ProcessingJob.newLink(owner, link));
+                acceptedUrls++;
             }
         }
 
-        log.info("Принято от {}: {} файлов, {} ссылок", owner, fileCount, urlCount);
-        tellOwner(owner, fileCount, urlCount);
-        return ResponseEntity.ok("Принято! Задачи поставлены в очередь.");
+        log.info("Принято от {}: {} файлов, {} ссылок; отклонено: по квоте {}, по площадке {}",
+                owner, acceptedFiles, acceptedUrls, overQuota, unsupported);
+
+        if (acceptedFiles == 0 && acceptedUrls == 0) {
+            // Код отражает причину: неподдерживаемая ссылка — это ошибка в
+            // запросе, а исчерпанный лимит — «слишком часто»
+            if (unsupported > 0 && overQuota == 0) {
+                return ResponseEntity.badRequest()
+                        .body(HomeApi.Acceptance.UNSUPPORTED.userMessage() + "\n\n"
+                                + supportedPlatforms.supportedListText());
+            }
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(HomeApi.Acceptance.QUOTA_EXCEEDED.userMessage());
+        }
+
+        tellOwner(owner, acceptedFiles, acceptedUrls);
+        return ResponseEntity.ok(answer(overQuota, unsupported));
+    }
+
+    /** Честный ответ формы: что взяли и что не взяли. */
+    private static String answer(int overQuota, int unsupported) {
+        StringBuilder text = new StringBuilder("Принято! Задачи поставлены в очередь.");
+        if (overQuota > 0) {
+            text.append(" Не влезло в лимит: ").append(overQuota).append('.');
+        }
+        if (unsupported > 0) {
+            text.append(" Отклонено ссылок с неподдерживаемых площадок: ")
+                    .append(unsupported).append('.');
+        }
+        return text.toString();
     }
 
     /**

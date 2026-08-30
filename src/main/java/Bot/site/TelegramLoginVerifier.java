@@ -76,9 +76,16 @@ public class TelegramLoginVerifier {
             return Optional.empty();
         }
 
-        String authDate = params.get("auth_date");
-        if (authDate == null || Instant.ofEpochSecond(Long.parseLong(authDate))
-                .isBefore(Instant.now().minus(MAX_AGE))) {
+        // Разбор в try: нечисловой auth_date — это подделка, и отвечать на неё
+        // надо отказом, а не пятисоткой из недр парсера
+        Instant signedAt;
+        try {
+            signedAt = Instant.ofEpochSecond(Long.parseLong(params.getOrDefault("auth_date", "")));
+        } catch (NumberFormatException | ArithmeticException e) {
+            log.warn("Вход через Telegram отклонён: неразбираемый auth_date");
+            return Optional.empty();
+        }
+        if (signedAt.isBefore(Instant.now().minus(MAX_AGE))) {
             log.warn("Вход через Telegram отклонён: данные устарели");
             return Optional.empty();
         }

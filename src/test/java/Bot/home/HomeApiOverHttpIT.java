@@ -35,7 +35,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 })
 class HomeApiOverHttpIT {
 
-    private static final Owner OWNER = Owner.telegram(4242L);
+    /**
+     * Свой идентификатор, не пересекающийся с другими тестами.
+     *
+     * <p>Был 4242 — тот же, что у {@code SiteAccessIT}. База в контейнере одна
+     * на форк, аккаунт у чата общий, и задачи соседнего класса съедали здешнюю
+     * квоту: класс проходил в одиночку и падал в общем прогоне, причём
+     * молчаливым «queued = 0».</p>
+     */
+    private static final Owner OWNER = Owner.telegram(70424242L);
 
     @LocalServerPort private int port;
 
@@ -47,8 +55,10 @@ class HomeApiOverHttpIT {
     void enqueuedLinkIsVisibleInStatus() {
         HomeApi home = client("test-key");
 
-        home.transcribeLink(OWNER, "https://youtu.be/dQw4w9WgXcQ");
-
+        // Исход проверяем явно: без этого отказ по квоте или по площадке
+        // выглядел бы как «задача потерялась», и искать причину пришлось бы с нуля
+        assertThat(home.transcribeLink(OWNER, "https://youtu.be/dQw4w9WgXcQ"))
+                .isEqualTo(HomeApi.Acceptance.STARTED);
         assertThat(home.status(OWNER).queued()).isEqualTo(1);
     }
 

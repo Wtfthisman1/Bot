@@ -40,30 +40,65 @@ class BotLoginServiceTest {
 
     @Test
     void freshCodeWaitsForConfirmation() {
-        String code = logins.issue();
+        BotLoginService.Issued issued = logins.issue();
 
-        assertThat(logins.stateOf(code)).isEqualTo(BotLoginService.State.WAITING);
-        assertThat(logins.claim(code)).isEmpty();
+        assertThat(logins.stateOf(issued.code())).isEqualTo(BotLoginService.State.WAITING);
+        assertThat(logins.claim(issued.code())).isEmpty();
     }
 
     @Test
     void confirmedCodeLetsTheBrowserIn() {
-        String code = logins.issue();
+        BotLoginService.Issued issued = logins.issue();
 
-        assertThat(logins.confirm(CHAT_ID, code, "Аня")).isTrue();
-        assertThat(logins.stateOf(code)).isEqualTo(BotLoginService.State.CONFIRMED);
-        assertThat(logins.claim(code)).isPresent();
+        assertThat(logins.confirm(CHAT_ID, issued.code(), "Аня", issued.checkNumber()))
+                .isEqualTo(BotLoginService.Confirmation.CONFIRMED);
+        assertThat(logins.stateOf(issued.code())).isEqualTo(BotLoginService.State.CONFIRMED);
+        assertThat(logins.claim(issued.code())).isPresent();
+    }
+
+    /**
+     * Главное свойство сверки: подтвердить вход может только тот, кто видит
+     * страницу. Ссылку можно прислать постороннему под любым предлогом, и
+     * раньше ему хватало нажать «Это я».
+     */
+    @Test
+    void wrongNumberBurnsTheCode() {
+        BotLoginService.Issued issued = logins.issue();
+        int wrong = issued.checkNumber() == 42 ? 43 : 42;
+
+        assertThat(logins.confirm(CHAT_ID, issued.code(), "Аня", wrong))
+                .isEqualTo(BotLoginService.Confirmation.WRONG_NUMBER);
+
+        // Второй попытки нет: у того, кому прислали чужую ссылку, её быть не должно
+        assertThat(logins.confirm(CHAT_ID, issued.code(), "Аня", issued.checkNumber()))
+                .isEqualTo(BotLoginService.Confirmation.STALE);
+        assertThat(logins.claim(issued.code())).isEmpty();
+    }
+
+    @Test
+    void challengeContainsTheRealNumberAmongOthers() {
+        BotLoginService.Issued issued = logins.issue();
+
+        var numbers = logins.challengeFor(issued.code());
+        assertThat(numbers).hasSize(3).doesNotHaveDuplicates()
+                .contains(issued.checkNumber());
+        assertThat(numbers).allMatch(n -> n >= 10 && n <= 99);
+    }
+
+    @Test
+    void challengeForAnUnknownCodeTellsNothing() {
+        assertThat(logins.challengeFor("нет-такого")).isEmpty();
     }
 
     /** Второй браузер по тому же коду войти не должен. */
     @Test
     void codeWorksExactlyOnce() {
-        String code = logins.issue();
-        logins.confirm(CHAT_ID, code, "Аня");
+        BotLoginService.Issued issued = logins.issue();
+        logins.confirm(CHAT_ID, issued.code(), "Аня", issued.checkNumber());
 
-        assertThat(logins.claim(code)).isPresent();
-        assertThat(logins.claim(code)).isEmpty();
-        assertThat(logins.stateOf(code)).isEqualTo(BotLoginService.State.UNKNOWN);
+        assertThat(logins.claim(issued.code())).isPresent();
+        assertThat(logins.claim(issued.code())).isEmpty();
+        assertThat(logins.stateOf(issued.code())).isEqualTo(BotLoginService.State.UNKNOWN);
     }
 
     /** Вход через бота и вход виджетом — одна и та же учётная запись. */
@@ -72,10 +107,10 @@ class BotLoginServiceTest {
         AccountService.Account viaWidget = accounts.findOrCreateByIdentity(
                 IdentityProvider.TELEGRAM, String.valueOf(CHAT_ID), "Аня", null);
 
-        String code = logins.issue();
-        logins.confirm(CHAT_ID, code, "Аня");
+        BotLoginService.Issued issued = logins.issue();
+        logins.confirm(CHAT_ID, issued.code(), "Аня", issued.checkNumber());
 
-        assertThat(logins.claim(code))
+        assertThat(logins.claim(issued.code()))
                 .map(AccountService.Account::id)
                 .contains(viaWidget.id());
         assertThat(accountRepository.count()).isEqualTo(1);
@@ -83,20 +118,22 @@ class BotLoginServiceTest {
 
     @Test
     void unknownCodeIsRefused() {
-        assertThat(logins.confirm(CHAT_ID, "нет-такого", null)).isFalse();
+        assertThat(logins.confirm(CHAT_ID, "нет-такого", null, 42))
+                .isEqualTo(BotLoginService.Confirmation.STALE);
         assertThat(logins.stateOf("нет-такого")).isEqualTo(BotLoginService.State.UNKNOWN);
     }
 
     /** Код в открытой вкладке не должен жить вечно. */
     @Test
     void expiredCodeIsRefusedEvenBeforeConfirmation() {
-        String code = logins.issue();
-        BotLoginCodeEntity entity = codes.findById(code).orElseThrow();
+        BotLoginService.Issued issued = logins.issue();
+        BotLoginCodeEntity entity = codes.findById(issued.code()).orElseThrow();
         entity.setExpiresAt(Instant.now().minus(Duration.ofMinutes(1)));
         codes.save(entity);
 
-        assertThat(logins.stateOf(code)).isEqualTo(BotLoginService.State.EXPIRED);
-        assertThat(logins.confirm(CHAT_ID, code, "Аня")).isFalse();
-        assertThat(logins.claim(code)).isEmpty();
+        assertThat(logins.stateOf(issued.code())).isEqualTo(BotLoginService.State.EXPIRED);
+        assertThat(logins.confirm(CHAT_ID, issued.code(), "Аня", issued.checkNumber()))
+                .isEqualTo(BotLoginService.Confirmation.STALE);
+        assertThat(logins.claim(issued.code())).isEmpty();
     }
 }

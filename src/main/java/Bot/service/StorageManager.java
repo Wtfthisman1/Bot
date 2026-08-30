@@ -91,12 +91,17 @@ public class StorageManager {
 
 
     private String videoTitle(String url) throws IOException {
-        ProcessBuilder pb = new ProcessBuilder("yt-dlp", 
+        // «--» обязателен: без него ссылка, начинающаяся с дефиса, разбирается
+        // yt-dlp как опция, а не как адрес. Проверено: строка «--version» в этой
+        // позиции печатает версию вместо отказа, а рядом в справке живут
+        // --exec, --config-location и --paths
+        ProcessBuilder pb = new ProcessBuilder("yt-dlp",
                 "-e",
                 "--no-warnings", 
                 "--ignore-errors", 
                 "--no-playlist",
                 "--quiet",
+                "--",
                 url)
                 .redirectError(ProcessBuilder.Redirect.DISCARD);  // Игнорируем stderr полностью
         

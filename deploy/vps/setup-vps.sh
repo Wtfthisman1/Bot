@@ -75,6 +75,24 @@ ufw allow in on wg0 comment "трафик внутри WireGuard" >/dev/null
 ufw --force enable  >/dev/null
 ufw status numbered | grep -E "22|80|443|51820|wg0"
 
+say "ssh: вход только по ключу"
+# Ставится после ufw и до всего остального: порт 22 открыт всему интернету, и
+# перебор в него идёт непрерывно. Файл кладём рядом с ключом, который уже
+# работает, — иначе следующая строка закрыла бы вход самому себе.
+if [[ -f /root/.ssh/authorized_keys && -s /root/.ssh/authorized_keys ]]; then
+    install -m 644 -o root -g root "${SSHD_CONF_SRC:-/root/sshd-hardening.conf}" \
+        /etc/ssh/sshd_config.d/99-transcribot.conf
+    if sshd -t; then
+        systemctl reload ssh
+        say "ssh: пароль выключен, вход только по ключу"
+    else
+        rm -f /etc/ssh/sshd_config.d/99-transcribot.conf
+        echo "ОШИБКА: sshd не принял конфиг, закалка отменена" >&2
+    fi
+else
+    echo "ПРОПУСК: в /root/.ssh/authorized_keys нет ключа — выключать пароль нельзя" >&2
+fi
+
 say "nginx: временный HTTP-сайт под проверку домена"
 mkdir -p /var/www/certbot
 # Каталог должен быть читаем для nginx (www-data), иначе Let's Encrypt
@@ -106,26 +124,43 @@ cat > /var/www/transcribot/asleep.html <<'HTML'
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Рабочая машина спит</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0c0c0d">
+    <title>Рабочая машина спит — Транскрибот</title>
+    <!-- Те же цвета, что и на сайте: человек не должен решить, что попал
+         не туда. Файл лежит на VPS отдельно от приложения, поэтому стили
+         повторены здесь целиком — общего site.css отсюда не достать -->
     <style>
-        body { background:#10131a; color:#e8ecf3; font:16px/1.6 system-ui, sans-serif;
-               display:flex; align-items:center; justify-content:center;
-               min-height:100vh; margin:0; }
-        div { max-width:420px; padding:24px; }
-        h1 { font-size:22px; margin:0 0 12px; }
-        p { color:#97a1b3; }
-        a { color:#4c8dff; }
+        :root { color-scheme: dark; }
+        body { margin:0; min-height:100vh; display:flex; align-items:center;
+               justify-content:center; padding:24px;
+               background:#0c0c0d; color:#f2efea;
+               font:16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI",
+                    Roboto, "Helvetica Neue", Arial, sans-serif;
+               -webkit-font-smoothing:antialiased; }
+        main { max-width:440px; padding:32px 26px;
+               background:#151517; border:1px solid #232326; border-radius:16px; }
+        svg { display:block; fill:#c8a96b; margin-bottom:18px; }
+        h1 { margin:0 0 14px; font:400 26px/1.25 ui-serif, Georgia,
+             "Times New Roman", serif; letter-spacing:-0.01em; }
+        p { margin:0 0 12px; color:#9b968e; }
+        p:last-child { margin-bottom:0; }
     </style>
 </head>
 <body>
-<div>
-    <h1>🌙 Рабочая машина сейчас спит</h1>
+<main>
+    <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <rect x="6.6" y="13" width="2.6" height="6" rx="1.3"/>
+        <rect x="11.8" y="8.5" width="2.6" height="15" rx="1.3"/>
+        <rect x="17" y="11" width="2.6" height="10" rx="1.3"/>
+        <rect x="22.2" y="14.2" width="2.6" height="3.6" rx="1.3"/>
+    </svg>
+    <h1>Рабочая машина сейчас спит</h1>
     <p>Сайт живёт на домашнем компьютере с видеокартой — он включён не круглосуточно.
         Загляните позже.</p>
     <p>Задачу можно поставить прямо сейчас через бота в Telegram: он принимает
         её и запускает, как только машина проснётся.</p>
-</div>
+</main>
 </body>
 </html>
 HTML

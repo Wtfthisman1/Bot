@@ -91,9 +91,19 @@ public class TelegramFileDownloader {
         Path downloadPath = storageManager.uploadedPath(Owner.telegram(chatId), tempFileName);
         Files.createDirectories(downloadPath.getParent());
         
-        // Скачиваем файл
+        // Скачиваем файл.
+        //
+        // Ошибка перехватывается и пересобирается без адреса: в fileUrl сидит
+        // токен бота, а JDK вставляет весь URL в текст исключения
+        // («Server returned HTTP response code: 403 for URL: ...»). Дальше этот
+        // текст уходит в logs/app.log вместе со стектрейсом — то есть токен,
+        // дающий полную власть над ботом, ложился в файл при каждой обычной
+        // неудаче вроде протухшей ссылки Bot API.
         try (InputStream in = new URL(fileUrl).openStream()) {
             Files.copy(in, downloadPath, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new IOException("Не удалось скачать файл из Telegram: "
+                    + file.getFilePath() + " (" + e.getClass().getSimpleName() + ")");
         }
         
         log.info("Скачан файл из Telegram: chatId={}, путь={}, размер={} байт",

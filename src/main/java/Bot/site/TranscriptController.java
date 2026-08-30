@@ -190,8 +190,14 @@ public class TranscriptController {
         }
 
         long length = Files.size(file);
+        MediaType type = contentTypeOf(file);
         response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
-        response.setContentType(contentTypeOf(file).toString());
+        response.setContentType(type.toString());
+        // Неопознанное не показываем в странице, а отдаём файлом: плееру такое
+        // всё равно не нужно, а браузеру — повод выполнить содержимое
+        if (MediaType.APPLICATION_OCTET_STREAM.equals(type)) {
+            response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment");
+        }
 
         // Первый диапазон, а не все: браузеры при перемотке просят ровно один,
         // а составной ответ multipart/byteranges плееры принимают хуже
@@ -257,13 +263,33 @@ public class TranscriptController {
         return Files.isRegularFile(file) ? file : null;
     }
 
+    /**
+     * Тип записи — только из белого списка.
+     *
+     * <p>Раньше тип брался у {@code Files.probeContentType}, то есть по
+     * расширению файла, который прислал сам человек. Файл {@code x.html}
+     * возвращался как {@code text/html} и выполнялся браузером на домене
+     * сайта — со всеми куками сессии. Заголовок {@code nosniff} тут не
+     * помогает: тип объявлен честно, сниффинг ни при чём.</p>
+     */
     private static MediaType contentTypeOf(Path file) {
-        try {
-            String probed = Files.probeContentType(file);
-            return probed == null ? MediaType.APPLICATION_OCTET_STREAM : MediaType.parseMediaType(probed);
-        } catch (IOException | IllegalArgumentException e) {
-            return MediaType.APPLICATION_OCTET_STREAM;
-        }
+        String name = file.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        int dot = name.lastIndexOf('.');
+        String extension = dot >= 0 ? name.substring(dot + 1) : "";
+        return switch (extension) {
+            case "mp4", "m4v" -> MediaType.parseMediaType("video/mp4");
+            case "webm" -> MediaType.parseMediaType("video/webm");
+            case "mkv" -> MediaType.parseMediaType("video/x-matroska");
+            case "mov" -> MediaType.parseMediaType("video/quicktime");
+            case "mp3" -> MediaType.parseMediaType("audio/mpeg");
+            case "m4a", "aac" -> MediaType.parseMediaType("audio/mp4");
+            case "wav" -> MediaType.parseMediaType("audio/wav");
+            case "ogg", "oga", "opus" -> MediaType.parseMediaType("audio/ogg");
+            case "flac" -> MediaType.parseMediaType("audio/flac");
+            // Всё остальное плеер всё равно не покажет, а вот исполниться в
+            // браузере оно может — поэтому отдаём потоком байтов и вложением
+            default -> MediaType.APPLICATION_OCTET_STREAM;
+        };
     }
 
     private static String titleOf(JobEntity job) {

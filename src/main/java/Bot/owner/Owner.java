@@ -15,13 +15,37 @@ package Bot.owner;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 public record Owner(OwnerType type, String id) {
 
+    /** Chat id в Telegram — целое число; у групп и каналов оно отрицательное. */
+    private static final Pattern TELEGRAM_ID = Pattern.compile("-?\\d{1,19}");
+
+    /** UUID аккаунта ровно в каноническом виде: {@code UUID.fromString} слишком добр. */
+    private static final Pattern ACCOUNT_ID = Pattern.compile(
+            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+
+    /**
+     * Форма идентификатора проверяется здесь, а не там, где о ней вспомнят.
+     *
+     * <p>Владелец приезжает по сети — в теле запроса к дому и в записи спула на
+     * диске, — а из него {@link #storageKey()} собирает путь в хранилище. Пока
+     * проверки не было, {@code id} вида {@code ../../..} уводил запись за
+     * пределы каталога с файлами: сам по себе {@code /internal} закрыт ключом,
+     * но VPS — единственная машина в интернете, и её взлом не должен
+     * превращаться в запись файлов куда угодно на домашней.</p>
+     */
     public Owner {
         Objects.requireNonNull(type, "type");
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("id владельца не может быть пустым");
+        }
+        Pattern shape = type == OwnerType.TELEGRAM ? TELEGRAM_ID : ACCOUNT_ID;
+        if (!shape.matcher(id).matches()) {
+            // Сам id в сообщение не попадает: он пришёл снаружи, а сообщение
+            // уходит в журнал и оттуда админу в чат
+            throw new IllegalArgumentException("Недопустимый id владельца типа " + type);
         }
     }
 
