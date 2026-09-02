@@ -1,642 +1,578 @@
 <!doctype html>
+<!--
+  Форма загрузки: файлы и ссылки → задачи в очередь.
+
+  Страница нарочно самодостаточна — стили внутри, ни одного внешнего файла.
+  Сюда приходят по одноразовой ссылке из чата, то есть во встроенном браузере
+  Telegram и почти всегда с пустым кэшем: любой отдельный запрос за стилями —
+  это лишний круг до сервера перед первой отрисовкой. Здесь весь документ
+  приезжает одним ответом и рисуется сразу.
+
+  Слотов больше нет. Раньше на экран сразу вываливались пять пар «файл плюс
+  ссылка» — десять полей, из которых заполняют одно. Теперь один выбор файлов
+  (телефон умеет отдавать несколько за раз) и одна строка для ссылки, а
+  остальное появляется по мере надобности.
+-->
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Загрузка видео или ссылок</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c0c0d">
+  <meta name="robots" content="noindex">
+  <title>Загрузка — Транскрибот</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%230c0c0d'/%3E%3Cg%20fill='%23c8a96b'%3E%3Crect%20x='6.6'%20y='13'%20width='2.6'%20height='6'%20rx='1.3'/%3E%3Crect%20x='11.8'%20y='8.5'%20width='2.6'%20height='15'%20rx='1.3'/%3E%3Crect%20x='17'%20y='11'%20width='2.6'%20height='10'%20rx='1.3'/%3E%3Crect%20x='22.2'%20y='14.2'%20width='2.6'%20height='3.6'%20rx='1.3'/%3E%3C/g%3E%3C/svg%3E">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
-    body { 
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      min-height: 100vh;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 1rem;
-      position: relative;
-      overflow-x: hidden;
+    /* Те же цвета и меры, что и на сайте: страница одна из его комнат,
+       а не отдельная поделка */
+    :root {
+      --bg: #0c0c0d;
+      --panel: #151517;
+      --panel-hi: #1b1b1e;
+      --line: #232326;
+      --line-hi: #33333a;
+      --text: #f2efea;
+      --dim: #9b968e;
+      --faint: #6d6963;
+      --gold: #c8a96b;
+      --gold-hi: #dcc08a;
+      --ok: #86b795;
+      --bad: #d98a7b;
+      --serif: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+              "Helvetica Neue", Arial, sans-serif;
+      color-scheme: dark;
     }
-    
-    /* Анимированные фоны */
-    body::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/><circle cx="10" cy="60" r="0.5" fill="white" opacity="0.1"/><circle cx="90" cy="40" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
-      pointer-events: none;
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html { -webkit-text-size-adjust: 100%; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.6 var(--sans);
+      -webkit-font-smoothing: antialiased;
     }
-    
-    .container {
-      width: 100%;
-      max-width: 36rem;
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(20px);
-      padding: 2.5rem;
-      border-radius: 1.5rem;
-      box-shadow: 
-        0 25px 50px -12px rgba(0, 0, 0, 0.25),
-        0 0 0 1px rgba(255, 255, 255, 0.1);
-      position: relative;
-      animation: slideUp 0.6s ease-out;
+
+    .sheet {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 28px max(20px, env(safe-area-inset-right))
+               calc(40px + env(safe-area-inset-bottom))
+               max(20px, env(safe-area-inset-left));
     }
-    
-    @keyframes slideUp {
-      from {
-        opacity: 0;
-        transform: translateY(30px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-    
-    .header {
-      text-align: center;
-      margin-bottom: 2rem;
-    }
-    
-    .icon {
-      width: 4rem;
-      height: 4rem;
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 1rem;
-      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
-    }
-    
-    .icon svg {
-      width: 2rem;
-      height: 2rem;
-      fill: white;
-    }
-    
+
+    .head { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; }
+    .head svg { display: block; fill: var(--gold); }
+    .head span { font-family: var(--serif); font-size: 17px; }
+
     h1 {
-      font-size: 1.75rem;
-      font-weight: 700;
-      color: #2d3748;
-      margin-bottom: 0.5rem;
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      font: 400 30px/1.2 var(--serif);
+      letter-spacing: -0.01em;
+      margin: 0 0 10px;
     }
-    
-    .subtitle {
-      font-size: 0.95rem;
-      color: #718096;
-      line-height: 1.5;
+    .sub { margin: 0 0 30px; color: var(--dim); font-size: 15px; }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--faint);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
     }
-    
-    .slots {
-      margin-bottom: 2rem;
-    }
-    
-    .slot-row {
-      margin-bottom: 1.5rem;
-      animation: fadeIn 0.5s ease-out;
-      animation-fill-mode: both;
-    }
-    
-    .slot-row:nth-child(1) { animation-delay: 0.1s; }
-    .slot-row:nth-child(2) { animation-delay: 0.2s; }
-    .slot-row:nth-child(3) { animation-delay: 0.3s; }
-    .slot-row:nth-child(4) { animation-delay: 0.4s; }
-    .slot-row:nth-child(5) { animation-delay: 0.5s; }
-    
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateX(-20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
-    }
-    
-    .slot-inputs {
+
+    .block + .block { margin-top: 30px; }
+
+    /* ── выбор файлов ── */
+
+    .drop {
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
-      margin-bottom: 0.5rem;
-    }
-    
-    @media (min-width: 768px) {
-      .slot-inputs {
-        flex-direction: row;
-        gap: 1rem;
-      }
-    }
-    
-    .file-label {
-      flex: 1;
-      cursor: pointer;
-      border: 2px dashed #cbd5e0;
-      border-radius: 0.75rem;
-      padding: 1rem;
-      background: #f7fafc;
-      color: #718096;
-      transition: all 0.3s ease;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      /* Крупная цель под палец: это главное действие страницы, и на телефоне
+         в неё попадают не глядя */
+      min-height: 110px;
+      padding: 22px 18px;
+      background: var(--panel);
+      border: 1px dashed var(--line-hi);
+      border-radius: 14px;
       text-align: center;
-      position: relative;
-      overflow: hidden;
-    }
-    
-    .file-label:hover {
-      border-color: #667eea;
-      background: #edf2f7;
-      transform: translateY(-2px);
-      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.15);
-    }
-    
-    .file-label.dragover {
-      border-color: #667eea;
-      background: #e6fffa;
-      transform: scale(1.02);
-    }
-    
-    .file-input {
-      display: none;
-    }
-    
-    .url-input {
-      flex: 1;
-      border: 2px solid #e2e8f0;
-      border-radius: 0.75rem;
-      padding: 1rem;
-      font-size: 0.95rem;
-      transition: all 0.3s ease;
-      background: #f7fafc;
-    }
-    
-    .url-input:focus {
-      outline: none;
-      border-color: #667eea;
-      background: white;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-      transform: translateY(-1px);
-    }
-    
-    .url-input.error {
-      border-color: #e53e3e;
-      background: #fed7d7;
-    }
-    
-    .progress-container {
-      margin-top: 0.5rem;
-    }
-    
-    .progress-bar {
-      height: 0.5rem;
-      width: 100%;
-      background: #e2e8f0;
-      border-radius: 9999px;
-      overflow: hidden;
-      margin-bottom: 0.5rem;
-      position: relative;
-    }
-    
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #667eea, #764ba2);
-      width: 0;
-      transition: width 0.3s ease;
-      border-radius: 9999px;
-      position: relative;
-    }
-    
-    .progress-fill::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-      animation: shimmer 2s infinite;
-    }
-    
-    @keyframes shimmer {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
-    }
-    
-    .speed {
-      font-size: 0.8rem;
-      text-align: right;
-      color: #718096;
-      user-select: none;
-      visibility: hidden;
-      font-weight: 500;
-    }
-    
-    .slot-row[data-active="true"] .speed {
-      visibility: visible;
-      animation: fadeIn 0.3s ease;
-    }
-    
-    .send-btn {
-      width: 100%;
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      color: white;
-      padding: 1rem 2rem;
-      border: none;
-      border-radius: 0.75rem;
-      font-weight: 600;
-      font-size: 1rem;
       cursor: pointer;
-      transition: all 0.3s ease;
-      position: relative;
+      transition: border-color .12s ease, background-color .12s ease;
+    }
+    .drop:hover, .drop:focus-within, .drop.over { border-color: var(--gold); background: var(--panel-hi); }
+    /* Само поле не прячем через display:none — так оно перестало бы
+       принимать фокус с клавиатуры */
+    .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .drop b { font-weight: 500; font-size: 16px; }
+    .drop small { color: var(--faint); font-size: 13px; }
+
+    .picked { list-style: none; margin: 12px 0 0; padding: 0; }
+    .picked li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+    .picked .name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .picked .size { flex: none; color: var(--faint); font-size: 13px; }
+    .picked .drop-one {
+      flex: none;
+      width: 34px;
+      height: 34px;
+      background: none;
+      border: 0;
+      color: var(--faint);
+      font: 20px/1 var(--sans);
+      cursor: pointer;
+    }
+    .picked .drop-one:hover { color: var(--bad); }
+
+    /* ── ссылки ── */
+
+    input[type=url] {
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 13px 14px;
+      /* Ровно 16px: от меньшего Safari на iPhone приближает страницу
+         при касании поля и обратно не отдаёт */
+      font: 16px/1.4 var(--sans);
+      transition: border-color .12s ease;
+    }
+    input[type=url] + input[type=url] { margin-top: 10px; }
+    input[type=url]::placeholder { color: var(--faint); }
+    input[type=url]:focus { outline: none; border-color: var(--gold); background: var(--panel-hi); }
+    input[type=url].wrong { border-color: var(--bad); }
+
+    .more {
+      margin-top: 12px;
+      padding: 0;
+      background: none;
+      border: 0;
+      color: var(--dim);
+      font: 14px var(--sans);
+      cursor: pointer;
+    }
+    .more:hover { color: var(--gold); }
+    .more[hidden] { display: none; }
+
+    /* ── отправка ── */
+
+    .send {
+      display: block;
+      width: 100%;
+      min-height: 52px;
+      margin-top: 32px;
+      padding: 14px 22px;
+      background: var(--gold);
+      color: #17130b;
+      border: 1px solid var(--gold);
+      border-radius: 10px;
+      font: 500 16px/1.2 var(--sans);
+      cursor: pointer;
+      transition: background-color .12s ease;
+    }
+    .send:hover { background: var(--gold-hi); }
+    .send:disabled { opacity: .45; cursor: default; }
+
+    .note { margin: 12px 0 0; color: var(--faint); font-size: 13px; text-align: center; }
+
+    /* Одна полоса на всю отправку, а не пять одинаковых: файлы уходят одним
+       запросом, и раздельного прогресса у них не бывает — прежние пять полос
+       показывали одно и то же число */
+    .bar {
+      height: 2px;
+      margin-top: 26px;
+      background: var(--line);
+      border-radius: 2px;
       overflow: hidden;
     }
-    
-    .send-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
-    }
-    
-    .send-btn:active {
-      transform: translateY(0);
-    }
-    
-    .send-btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
-    }
-    
-    .send-btn.loading {
-      pointer-events: none;
-    }
-    
-    .send-btn.loading::after {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 1.5rem;
-      height: 1.5rem;
-      margin: -0.75rem 0 0 -0.75rem;
-      border: 2px solid transparent;
-      border-top: 2px solid white;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    
+    .bar[hidden] { display: none; }
+    .fill { height: 100%; width: 0; background: var(--gold); transition: width .2s linear; }
+
     .status {
-      margin-top: 1rem;
-      padding: 1rem;
-      border-radius: 0.75rem;
-      font-size: 0.9rem;
-      display: none;
+      margin: 22px 0 0;
+      padding: 14px 16px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-left: 2px solid var(--gold);
+      border-radius: 10px;
+      font-size: 15px;
     }
-    
-    .status.success {
-      background: #c6f6d5;
-      color: #22543d;
-      border: 1px solid #9ae6b4;
-      display: block;
+    .status[hidden] { display: none; }
+    .status.good { border-left-color: var(--ok); }
+    .status.bad { border-left-color: var(--bad); }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
     }
-    
-    .status.error {
-      background: #fed7d7;
-      color: #742a2a;
-      border: 1px solid #feb2b2;
-      display: block;
-    }
-    
-    .file-info {
-      font-size: 0.8rem;
-      color: #718096;
-      margin-top: 0.25rem;
-    }
-    
-    .drag-hint {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: #a0aec0;
-      font-size: 0.9rem;
-      pointer-events: none;
-      opacity: 0.7;
-    }
-    
-    .debug-info {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: rgba(0, 0, 0, 0.8);
-      color: white;
-      padding: 10px;
-      border-radius: 5px;
-      font-size: 12px;
-      z-index: 1000;
-      max-width: 300px;
+
+    @media (min-width: 600px) {
+      .sheet { padding-top: 48px; }
+      h1 { font-size: 38px; }
     }
   </style>
 </head>
 <body>
 
-<div class="debug-info" id="debugInfo">
-  <div>🔄 Загрузка страницы...</div>
-</div>
+<main class="sheet">
 
-<div class="container">
-  <div class="header">
-    <div class="icon">
-      <svg viewBox="0 0 24 24">
-        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
-      </svg>
-    </div>
-    <h1>Загрузка файлов</h1>
-    <p class="subtitle">Загрузите до 5 видео/аудио файлов или вставьте ссылки</p>
+  <div class="head">
+    <svg width="19" height="19" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <rect x="6.6" y="13" width="2.6" height="6" rx="1.3"/>
+      <rect x="11.8" y="8.5" width="2.6" height="15" rx="1.3"/>
+      <rect x="17" y="11" width="2.6" height="10" rx="1.3"/>
+      <rect x="22.2" y="14.2" width="2.6" height="3.6" rx="1.3"/>
+    </svg>
+    <span>Транскрибот</span>
   </div>
 
-  <div id="slots" class="slots"></div>
+  <h1>Загрузка</h1>
+  <p class="sub">До пяти файлов и до пяти ссылок за раз. Расшифровка придёт
+    в чат — эту страницу можно будет закрыть.</p>
 
-  <button id="sendBtn" type="button" class="send-btn">
-    <span class="btn-text">Отправить файлы</span>
-  </button>
-  
-  <div id="status" class="status"></div>
-</div>
+  <section class="block">
+    <p class="eyebrow">Файлы</p>
+    <label class="drop" id="drop">
+      <input type="file" id="file" multiple
+             accept="audio/*,video/*,.mp3,.wav,.m4a,.ogg,.mp4,.avi,.mkv,.mov,.webm,.flv,.wmv">
+      <b>Выбрать аудио или видео</b>
+      <small>или перетащить сюда</small>
+    </label>
+    <ul class="picked" id="picked"></ul>
+  </section>
+
+  <section class="block">
+    <p class="eyebrow">Ссылки</p>
+    <div id="urls">
+      <input type="url" name="url" inputmode="url" autocomplete="off"
+             spellcheck="false" placeholder="https://youtube.com/…">
+    </div>
+    <button type="button" class="more" id="addUrl">Добавить ещё ссылку</button>
+  </section>
+
+  <div class="bar" id="bar" hidden><div class="fill" id="fill"></div></div>
+
+  <button type="button" class="send" id="send">Отправить</button>
+  <p class="note" id="note">Пока ничего не выбрано</p>
+
+  <p class="status" id="status" hidden></p>
+
+</main>
 
 <script>
-  // Отладочная информация
-  console.log('🚀 Страница загружается...');
-  
-  function updateDebugInfo(message) {
-    const debugInfo = document.getElementById('debugInfo');
-    if (debugInfo) {
-      debugInfo.innerHTML = `<div>${message}</div>`;
-    }
-    console.log(message);
-  }
-  
-  updateDebugInfo('📝 Инициализация JavaScript...');
-  
-  const MAX = 5;
-  const token = location.pathname.split('/').pop();
-  const actionUrl = `/upload/${token}`;
-  
-  updateDebugInfo(`🔑 Токен: ${token}<br>🔗 URL: ${actionUrl}`);
+(function () {
+    'use strict';
 
-  /* ─────────────── генерация слотов ─────────────── */
-  updateDebugInfo('🔧 Создание элементов формы...');
-  const slotsRoot = document.getElementById('slots');
+    var MAX = 5;
+    /* Предел стоит на всей отправке, а не на файле: spring.servlet.multipart
+       ограничивает max-request-size, и три файла по гигабайту сервер отвергнет
+       уже после того, как человек их зальёт. Дешевле сказать сразу */
+    var MAX_BYTES = 2500 * 1024 * 1024;
 
-  for (let i = 0; i < MAX; i++) {
-    const row = document.createElement('div');
-    row.className = 'slot-row';
-    row.innerHTML = `
-      <div class="slot-inputs">
-        <label class="file-label" data-slot="${i}">
-          <div class="drag-hint">🎬 Выбрать видео/аудио или перетащить</div>
-          <input type="file" name="file" class="file-input" data-slot="${i}" accept="audio/*,video/*,.mp3,.wav,.m4a,.mp4,.avi,.mkv,.mov,.webm,.flv,.wmv" />
-        </label>
-        <input type="text" name="url" placeholder="🔗 https://youtube.com/..." class="url-input" autocomplete="off" data-slot="${i}" />
-      </div>
-      <div class="progress-container">
-        <div class="progress-bar">
-          <div data-bar class="progress-fill"></div>
-        </div>
-        <div class="speed">0%</div>
-      </div>
-      <div class="file-info" data-file-info="${i}"></div>`;
-    slotsRoot.append(row);
-  }
+    var token = location.pathname.split('/').pop();
 
-  updateDebugInfo('✅ Форма создана успешно!');
+    var fileInput = document.getElementById('file');
+    var dropZone  = document.getElementById('drop');
+    var pickedList = document.getElementById('picked');
+    var urlsBox   = document.getElementById('urls');
+    var addUrlBtn = document.getElementById('addUrl');
+    var sendBtn   = document.getElementById('send');
+    var note      = document.getElementById('note');
+    var status    = document.getElementById('status');
+    var bar       = document.getElementById('bar');
+    var fill      = document.getElementById('fill');
 
-  /* ─────────── Drag & Drop ─────────── */
-  document.querySelectorAll('.file-label').forEach(label => {
-    label.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      label.classList.add('dragover');
+    /* Свой список файлов, а не тот, что лежит в поле: из FileList нельзя
+       убрать один файл, а убрать лишний — это первое, что делают, промахнувшись
+       в галерее. Поле здесь только источник, хранит выбор этот массив */
+    var picked = [];
+    var done = false;
+
+    /* ─────────── выбор файлов ─────────── */
+
+    fileInput.addEventListener('change', function () {
+        add(fileInput.files);
+        // Сброс: иначе тот же файл, однажды убранный из списка, второй раз уже
+        // не выбрать — значение поля не изменится, и «change» не случится
+        fileInput.value = '';
     });
-    
-    label.addEventListener('dragleave', () => {
-      label.classList.remove('dragover');
+
+    ['dragenter', 'dragover'].forEach(function (type) {
+        dropZone.addEventListener(type, function (e) {
+            e.preventDefault();
+            dropZone.classList.add('over');
+        });
     });
-    
-    label.addEventListener('drop', (e) => {
-      e.preventDefault();
-      label.classList.remove('dragover');
-      const files = e.dataTransfer.files;
-      if (files.length > 0) {
-        const input = label.querySelector('input[type="file"]');
-        input.files = files;
-        updateFileInfo(input);
-      }
+    ['dragleave', 'drop'].forEach(function (type) {
+        dropZone.addEventListener(type, function () { dropZone.classList.remove('over'); });
     });
-  });
+    dropZone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        add(e.dataTransfer.files);
+    });
 
-  /* ─────────── UX: имя файла & валидация ─────────── */
-  slotsRoot.addEventListener('change', e => {
-    if (e.target.type === 'file') {
-      updateFileInfo(e.target);
-    }
-  });
-
-  slotsRoot.addEventListener('input', e => {
-    if (e.target.name === 'url') {
-      validateUrl(e.target);
-    }
-  });
-
-  function updateFileInfo(input) {
-    const slot = input.dataset.slot;
-    const fileInfo = document.querySelector(`[data-file-info="${slot}"]`);
-    const label = input.closest('.file-label');
-    
-    if (input.files.length > 0) {
-      const file = input.files[0];
-      const size = formatFileSize(file.size);
-      fileInfo.textContent = `📄 ${file.name} (${size})`;
-      fileInfo.style.display = 'block';
-      label.style.borderColor = '#48bb78';
-      label.style.background = '#f0fff4';
-    } else {
-      fileInfo.style.display = 'none';
-      label.style.borderColor = '#cbd5e0';
-      label.style.background = '#f7fafc';
-    }
-  }
-
-  function validateUrl(input) {
-    const url = input.value.trim();
-    if (url && !isValidUrl(url)) {
-      input.classList.add('error');
-      input.style.borderColor = '#e53e3e';
-    } else {
-      input.classList.remove('error');
-      input.style.borderColor = url ? '#48bb78' : '#e2e8f0';
-    }
-  }
-
-  function isValidUrl(string) {
-    try {
-      new URL(string);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  }
-
-  /* ─────────── отправка ─────────── */
-  document.getElementById('sendBtn').addEventListener('click', () => {
-    updateDebugInfo('📤 Отправка данных...');
-    
-    const form = new FormData();
-    const slots = [...document.querySelectorAll('.slot-row')];
-    const status = document.getElementById('status');
-    const btn = document.getElementById('sendBtn');
-    const btnText = btn.querySelector('.btn-text');
-
-    // Сброс статуса
-    status.className = 'status';
-    status.style.display = 'none';
-
-    slots.forEach(row => row.dataset.active = 'false');
-
-    let any = false;
-    let hasErrors = false;
-
-    slots.forEach((row, idx) => {
-      const file = row.querySelector('input[type="file"]').files[0];
-      const url = row.querySelector('input[name="url"]').value.trim();
-
-      if (file) {
-        form.append('file', file);
-        any = true;
-        row.dataset.active = 'true';
-      }
-      if (url) {
-        if (isValidUrl(url)) {
-          form.append('url', url);
-          any = true;
-          row.dataset.active = 'true';
-        } else {
-          hasErrors = true;
+    function add(list) {
+        for (var i = 0; i < list.length; i++) {
+            var file = list[i];
+            if (picked.length >= MAX) {
+                say('Больше ' + MAX + ' файлов за раз не принимаем. Остальные пришлите следующей ссылкой.', 'bad');
+                break;
+            }
+            // Один и тот же файл легко выбрать дважды — из галереи и перетаскиванием
+            var twice = picked.some(function (had) {
+                return had.name === file.name && had.size === file.size;
+            });
+            if (!twice) picked.push(file);
         }
-      }
+        drawPicked();
+        count();
+    }
+
+    function drawPicked() {
+        pickedList.textContent = '';
+        picked.forEach(function (file, index) {
+            var row = document.createElement('li');
+
+            var name = document.createElement('span');
+            name.className = 'name';
+            name.textContent = file.name;
+
+            var size = document.createElement('span');
+            size.className = 'size';
+            size.textContent = megabytes(file.size);
+
+            var kill = document.createElement('button');
+            kill.type = 'button';
+            kill.className = 'drop-one';
+            kill.textContent = '×';
+            kill.title = 'Убрать';
+            kill.addEventListener('click', function () {
+                picked.splice(index, 1);
+                drawPicked();
+                count();
+            });
+
+            row.append(name, size, kill);
+            pickedList.append(row);
+        });
+    }
+
+    /* ─────────── ссылки ─────────── */
+
+    addUrlBtn.addEventListener('click', function () {
+        // Кнопка к этому моменту уже спрятана, но проверка стоит здесь, а не
+        // только в конце: спрятанное — это про глаза, а предел должен быть
+        // пределом
+        if (urlsBox.children.length >= MAX) return;
+
+        var field = document.createElement('input');
+        field.type = 'url';
+        field.name = 'url';
+        field.inputMode = 'url';
+        field.autocomplete = 'off';
+        field.spellcheck = false;
+        field.placeholder = 'https://…';
+        urlsBox.append(field);
+        field.focus();
+        if (urlsBox.children.length >= MAX) addUrlBtn.hidden = true;
     });
 
-    if (hasErrors) {
-      showStatus('Проверьте правильность ссылок', 'error');
-      updateDebugInfo('❌ Ошибка валидации');
-      return;
+    urlsBox.addEventListener('input', function (e) {
+        e.target.classList.remove('wrong');
+        count();
+    });
+
+    function urls() {
+        return Array.prototype.map.call(urlsBox.children, function (field) {
+            return field.value.trim();
+        }).filter(Boolean);
     }
 
-    if (!any) {
-      showStatus('Выберите файл или введите ссылку', 'error');
-      updateDebugInfo('❌ Нет данных для отправки');
-      return;
+    function looksLikeLink(value) {
+        try {
+            var parsed = new URL(value);
+            // yt-dlp ходит по http и https и ни по чему больше; остальные схемы
+            // отсеиваем здесь, чтобы не гонять файл ради отказа на сервере
+            return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch (e) {
+            return false;
+        }
     }
 
-    // Показываем загрузку
-    btn.classList.add('loading');
-    btnText.textContent = 'Отправка...';
+    /* ─────────── что сейчас выбрано ─────────── */
 
-    const xhr = new XMLHttpRequest();
-    const startTime = Date.now();
+    /*
+      Строка под кнопкой отвечает на вопрос, который иначе задают уже после
+      нажатия: сколько всего уходит и не слишком ли это много.
+    */
+    function count() {
+        if (done) return;
 
-    xhr.upload.onprogress = ev => {
-      if (!ev.lengthComputable) return;
-      const pct = ev.loaded / ev.total;
-      const speed = ev.loaded / ((Date.now() - startTime) / 1000);
-      const speedStr = speed > 1e6 ? (speed/1e6).toFixed(1)+' MB/s' : (speed/1e3).toFixed(1)+' kB/s';
+        var linkCount = urls().length;
+        var bytes = picked.reduce(function (sum, file) { return sum + file.size; }, 0);
 
-      slots.filter(r => r.dataset.active === 'true').forEach(r => {
-        r.querySelector('[data-bar]').style.width = (pct*100)+'%';
-        r.querySelector('.speed').textContent = (pct*100).toFixed(0)+'% • '+speedStr;
-      });
-    };
+        if (!picked.length && !linkCount) {
+            note.textContent = 'Пока ничего не выбрано';
+            return;
+        }
 
-    xhr.onload = () => {
-      slots.forEach(r => r.querySelector('[data-bar]').style.width = '100%');
-      
-      if (xhr.status === 200) {
-        // Страницу не перезагружаем: ссылка одноразовая, и обновлённая форма
-        // выглядела бы рабочей, а на первой же отправке отвечала 403 —
-        // человек видел бы ошибку сразу после успеха
-        showStatus('Принято! Расшифровка придёт в чат. Эту страницу можно закрыть.', 'success');
-        updateDebugInfo('✅ Успешно отправлено!');
-        finish('Отправлено');
-        return;
-      }
+        var parts = [];
+        if (picked.length) parts.push(picked.length + ' ' + word(picked.length, 'файл', 'файла', 'файлов'));
+        if (linkCount) parts.push(linkCount + ' ' + word(linkCount, 'ссылка', 'ссылки', 'ссылок'));
+        if (bytes) parts.push(megabytes(bytes));
 
-      showStatus(xhr.status === 403
-        ? 'Ссылка уже использована. Попросите у бота новую — «Загрузить файлы».'
-        : 'Ошибка загрузки: ' + (xhr.responseText || 'Неизвестная ошибка'), 'error');
-      updateDebugInfo('❌ Ошибка: ' + xhr.status);
+        note.textContent = parts.join(' · ');
+        if (bytes > MAX_BYTES) {
+            note.textContent += ' — больше предела в ' + megabytes(MAX_BYTES);
+        }
+    }
 
-      if (xhr.status === 403) {
-        finish('Ссылка недействительна');
-        return;
-      }
-      btn.classList.remove('loading');
-      btnText.textContent = 'Отправить файлы';
-    };
+    /* ─────────── отправка ─────────── */
 
-    xhr.onerror = () => {
-      showStatus('Ошибка сети. Проверьте соединение.', 'error');
-      updateDebugInfo('❌ Ошибка сети');
-      btn.classList.remove('loading');
-      btnText.textContent = 'Отправить файлы';
-    };
+    sendBtn.addEventListener('click', function () {
+        if (done) return;
 
-    updateDebugInfo('🌐 Отправка запроса...');
-    xhr.open('POST', actionUrl);
-    xhr.send(form);
-  });
+        var links = urls();
+        var wrong = Array.prototype.filter.call(urlsBox.children, function (field) {
+            var bad = field.value.trim() && !looksLikeLink(field.value.trim());
+            field.classList.toggle('wrong', bad);
+            return bad;
+        });
 
-  /**
-   * Конец работы формы: отправлять по этой ссылке больше нечего.
-   *
-   * Кнопка не просто гаснет, а меняет подпись: серая кнопка без объяснения
-   * читается как поломка, а не как «всё уже сделано».
-   */
-  function finish(label) {
-    const btn = document.getElementById('sendBtn');
-    const btnText = btn.querySelector('.btn-text');
-    btn.classList.remove('loading');
-    btn.disabled = true;
-    btnText.textContent = label;
-  }
+        if (wrong.length) {
+            say('Проверьте ссылки: нужен полный адрес, вместе с https://', 'bad');
+            wrong[0].focus();
+            return;
+        }
+        if (!picked.length && !links.length) {
+            say('Выберите файл или вставьте ссылку.', 'bad');
+            return;
+        }
 
-  function showStatus(message, type) {
-    const status = document.getElementById('status');
-    status.textContent = message;
-    status.className = `status ${type}`;
-    status.style.display = 'block';
-  }
-  
-  updateDebugInfo('🎉 Страница готова к работе!');
+        var bytes = picked.reduce(function (sum, file) { return sum + file.size; }, 0);
+        if (bytes > MAX_BYTES) {
+            say('За один раз принимаем до ' + megabytes(MAX_BYTES) + '. Разбейте отправку надвое: '
+                + 'ссылку на форму бот выдаст ещё раз.', 'bad');
+            return;
+        }
+
+        var form = new FormData();
+        picked.forEach(function (file) { form.append('file', file); });
+        links.forEach(function (link) { form.append('url', link); });
+
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Отправляем…';
+        bar.hidden = false;
+        status.hidden = true;
+
+        var xhr = new XMLHttpRequest();
+        var startedAt = Date.now();
+
+        xhr.upload.onprogress = function (e) {
+            if (!e.lengthComputable) return;
+            var part = e.loaded / e.total;
+            fill.style.width = (part * 100) + '%';
+
+            var perSecond = e.loaded / Math.max(1, (Date.now() - startedAt) / 1000);
+            note.textContent = Math.round(part * 100) + '% · ' + megabytes(e.loaded)
+                + ' из ' + megabytes(e.total) + ' · ' + megabytes(perSecond) + '/с';
+        };
+
+        xhr.onload = function () {
+            fill.style.width = '100%';
+
+            if (xhr.status === 200) {
+                // Страницу не перезагружаем: ссылка одноразовая, и обновлённая
+                // форма выглядела бы рабочей, а на первой же отправке отвечала
+                // 403 — человек видел бы ошибку сразу после успеха
+                say('Принято. Расшифровка придёт в чат — страницу можно закрыть.', 'good');
+                finish('Отправлено');
+                return;
+            }
+            if (xhr.status === 403) {
+                say('Ссылка уже использована. Попросите у бота новую — кнопка «Загрузить файлы».', 'bad');
+                finish('Ссылка недействительна');
+                return;
+            }
+            if (xhr.status === 413) {
+                say('Сервер отказался принять такой объём. Пришлите файлы по частям.', 'bad');
+                again();
+                return;
+            }
+            say(xhr.responseText || 'Не получилось загрузить. Попробуйте ещё раз.', 'bad');
+            again();
+        };
+
+        xhr.onerror = function () {
+            say('Связь оборвалась. Проверьте интернет и отправьте ещё раз — '
+                + 'ссылка остаётся рабочей.', 'bad');
+            again();
+        };
+
+        xhr.open('POST', '/upload/' + encodeURIComponent(token));
+        xhr.send(form);
+    });
+
+    /*
+      Конец работы формы: отправлять по этой ссылке больше нечего.
+
+      Кнопка не просто гаснет, а меняет подпись: серая кнопка без объяснения
+      читается как поломка, а не как «всё уже сделано».
+    */
+    function finish(label) {
+        done = true;
+        sendBtn.disabled = true;
+        sendBtn.textContent = label;
+        note.textContent = '';
+        bar.hidden = true;
+    }
+
+    /* Отказ, после которого попытка ещё имеет смысл: возвращаем форму в работу */
+    function again() {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Отправить';
+        bar.hidden = true;
+        fill.style.width = '0';
+        count();
+    }
+
+    function say(text, kind) {
+        status.textContent = text;
+        status.className = 'status ' + kind;
+        status.hidden = false;
+    }
+
+    function megabytes(bytes) {
+        if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' ГБ';
+        if (bytes >= 1024 * 1024) return Math.round(bytes / (1024 * 1024)) + ' МБ';
+        return Math.max(1, Math.round(bytes / 1024)) + ' КБ';
+    }
+
+    /* Русский счёт: «1 файл», «2 файла», «5 файлов» */
+    function word(n, one, few, many) {
+        var tens = n % 100;
+        if (tens > 10 && tens < 20) return many;
+        var units = n % 10;
+        if (units === 1) return one;
+        if (units >= 2 && units <= 4) return few;
+        return many;
+    }
+})();
 </script>
 </body>
 </html>

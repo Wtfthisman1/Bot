@@ -1,205 +1,617 @@
 /*
-  Оформление сайта: одна страница стилей на всё.
+  Оформление сайта: один файл на все страницы.
 
-  Своей сетки и своих компонентов нет сознательно — страниц четыре, и любой
-  фреймворк здесь весил бы больше, чем вся разметка вместе взятая.
+  Ни фреймворка, ни веб-шрифтов здесь нет сознательно, и дело не в размере
+  файла, а в том, когда страница появляется на экране. Веб-шрифт — это лишний
+  запрос перед первой отрисовкой и мигание текста поверх него; на телефоне из
+  встроенного браузера Telegram это самая заметная задержка, какая тут вообще
+  бывает. Системный набор шрифтов есть на устройстве всегда и рисуется сразу.
+
+  Дорогое ощущение здесь делают не эффекты, а три вещи: приглушённая тёплая
+  палитра, засечки в заголовках и воздух между блоками. Всё это не стоит ни
+  одного байта трафика и ни одного кадра при прокрутке — в отличие от размытий,
+  теней и анимаций, которые на телефоне первыми и роняют плавность.
+
+  Порядок правил — мобильный сначала. 9 из 10 человек приходят с телефона,
+  поэтому узкий экран здесь основной случай, а не исключение внизу файла.
 */
 
+/* ─────────────────── палитра и меры ─────────────────── */
+
 :root {
-    --bg: #10131a;
-    --panel: #171b24;
-    --line: #262c38;
-    --text: #e8ecf3;
-    --dim: #97a1b3;
-    --accent: #4c8dff;
-    --bad: #ff6b6b;
-    --ok: #4ec98a;
+    /* Чернила, а не чёрный: тёплая примесь убирает «дешёвый» синеватый отлив */
+    --bg: #0c0c0d;
+    --panel: #151517;
+    --panel-hi: #1b1b1e;
+
+    /* Волосяные линии вместо рамок: границы должны угадываться, а не спорить */
+    --line: #232326;
+    --line-hi: #33333a;
+
+    --text: #f2efea;
+    --dim: #9b968e;
+    --faint: #6d6963;
+
+    /* Шампань. Единственный цвет на сайте — и потому он всегда означает
+       «сюда»: главное действие, ссылка, текущая реплика */
+    --gold: #c8a96b;
+    --gold-hi: #dcc08a;
+
+    --ok: #86b795;
+    --bad: #d98a7b;
+
+    --serif: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    --radius: 14px;
+    --radius-sm: 10px;
+
+    /* Поля страницы держатся в переменной: их учитывают и шапка, и подвал,
+       и таблица, которая на телефоне выходит за пределы колонки */
+    --pad: 20px;
+    --shell: 760px;
 }
 
-* { box-sizing: border-box; }
+/* Тёмная тема — не оформление, а факт для браузера: по ней он красит полосы
+   прокрутки, выпадающие списки и кнопки плеера. Без этого нативные элементы
+   остаются светлыми и выпадают из страницы */
+:root { color-scheme: dark; }
+
+/* ─────────────────── основа ─────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+    /* Safari на телефоне сам увеличивает шрифт в альбомной ориентации и ломает
+       вёрстку колонки. Размер выбран здесь, менять его за нас не нужно */
+    -webkit-text-size-adjust: 100%;
+}
 
 body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 16px/1.55 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    font: 16px/1.65 var(--sans);
+    /* Тонкое сглаживание: светлый текст на тёмном фоне иначе выглядит жирнее,
+       чем задумано, и вся страница «тяжелеет» */
+    -webkit-font-smoothing: antialiased;
 }
 
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
+h1, h2, h3 {
+    font-family: var(--serif);
+    /* Светлое начертание засечек читается дорого, жирное — как газета */
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+    margin: 0;
+    /* Кириллица в засечках любит чуть больше воздуха между буквами, чем
+       латиница, — иначе на телефоне заголовок слипается */
+    word-spacing: 0.02em;
+}
 
-/* ── шапка и подвал ── */
+h1 { font-size: 30px; margin-bottom: 14px; }
+h2 { font-size: 21px; margin: 40px 0 14px; }
+h3 { font-size: 17px; margin: 24px 0 8px; }
+
+p { margin: 0 0 14px; }
+
+a {
+    color: var(--gold);
+    text-decoration: none;
+    /* Подчёркивание тонкой линией на отступе — так ссылка видна, но не
+       перечёркивает буквы с нижними выносными */
+    text-underline-offset: 3px;
+}
+a:hover { text-decoration: underline; text-decoration-thickness: 1px; }
+
+b, strong { font-weight: 600; color: var(--text); }
+small { display: inline-block; color: var(--dim); font-size: 13px; line-height: 1.5; }
+code {
+    font: 14px/1.5 var(--mono);
+    color: var(--gold);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1px 6px;
+    /* Команды и коды длиннее экрана телефона: пусть переносятся, а не
+       растягивают страницу вбок */
+    overflow-wrap: anywhere;
+}
+
+/* Обвод фокуса один на весь сайт: он нужен тем, кто ходит с клавиатуры,
+   и не должен появляться от пальца или мыши */
+:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+::selection { background: rgba(200, 169, 107, .25); }
+
+@media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+}
+
+/* ─────────────────── шапка и подвал ─────────────────── */
 
 .top {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 14px 24px;
+    gap: 12px;
+    /* Вырез и «чёлка» телефона: в альбомной ориентации без этого шапка
+       уезжает под скруглённый угол экрана */
+    padding: 14px max(var(--pad), env(safe-area-inset-left))
+             14px max(var(--pad), env(safe-area-inset-right));
     border-bottom: 1px solid var(--line);
 }
 
-.top .brand { font-weight: 600; color: var(--text); }
-.top nav { display: flex; align-items: center; gap: 14px; }
-.top .who { color: var(--dim); }
+.top .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--text);
+    font-family: var(--serif);
+    font-size: 17px;
+    letter-spacing: 0.005em;
+    white-space: nowrap;
+}
+.top .brand:hover { text-decoration: none; color: var(--gold); }
+.top .brand svg { display: block; flex: none; fill: var(--gold); }
 
-.bottom {
-    padding: 28px 24px 48px;
+.top nav {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    /* Без этого длинное имя из Google распирает шапку вместо того,
+       чтобы сжаться и обрезаться многоточием */
+    min-width: 0;
+}
+.top .who {
     color: var(--dim);
     font-size: 14px;
-    border-top: 1px solid var(--line);
-    margin-top: 48px;
-    text-align: center;
+    max-width: 9em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.bottom nav { display: flex; justify-content: center; flex-wrap: wrap; gap: 18px; }
-.bottom p { margin: 12px 0 0; }
+.bottom {
+    margin-top: 64px;
+    padding: 28px max(var(--pad), env(safe-area-inset-right))
+             calc(32px + env(safe-area-inset-bottom))
+             max(var(--pad), env(safe-area-inset-left));
+    border-top: 1px solid var(--line);
+    color: var(--faint);
+    font-size: 13px;
+    text-align: center;
+}
+.bottom nav { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px 22px; }
+.bottom nav a { color: var(--dim); }
+.bottom p { margin: 14px 0 0; }
 
-/* ── страница ── */
+/* ─────────────────── страница ─────────────────── */
 
-.page { max-width: 860px; margin: 0 auto; padding: 32px 24px; }
+.page {
+    max-width: var(--shell);
+    margin: 0 auto;
+    padding: 32px max(var(--pad), env(safe-area-inset-right))
+             0 max(var(--pad), env(safe-area-inset-left));
+}
+/* Формы входа и регистрации: узкая колонка читается как карточка,
+   а не как страница с пустотой по краям */
 .page.narrow { max-width: 420px; }
 
-h1 { font-size: 28px; margin: 0 0 12px; }
-h2 { font-size: 20px; margin: 32px 0 12px; }
-.lead { color: var(--dim); font-size: 18px; }
-.hint, .empty { color: var(--dim); }
-.or { color: var(--dim); text-align: center; margin: 20px 0 12px; }
+.lead {
+    color: var(--dim);
+    font-size: 17px;
+    line-height: 1.6;
+    margin-bottom: 20px;
+}
+.hint, .empty { color: var(--dim); font-size: 14px; }
+.empty { padding: 20px 0; }
+.or {
+    /* «или» между способами входа: черта по обе стороны от слова вместо
+       голого текста, который висел бы в пустоте */
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 26px 0 20px;
+    color: var(--faint);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+.or::before, .or::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+}
 
-.facts { color: var(--dim); padding-left: 20px; }
-.cta { display: flex; gap: 12px; margin: 24px 0; }
+/* Список фактов: не маркеры, а строки, разделённые волосяной линией.
+   Такой список читается описью, а не перечислением по пунктам */
+.facts {
+    list-style: none;
+    margin: 20px 0;
+    padding: 0;
+    border-top: 1px solid var(--line);
+}
+.facts li {
+    padding: 11px 0 11px 20px;
+    border-bottom: 1px solid var(--line);
+    color: var(--dim);
+    position: relative;
+}
+.facts li::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    /* Половина первой строки вниз: иначе штрих встаёт над текстом
+       и выглядит надстрочным знаком, а не маркером */
+    top: 1.5em;
+    width: 5px;
+    height: 1px;
+    background: var(--gold);
+}
 
-/* ── формы ── */
+.cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 26px 0;
+}
+/* На телефоне главное действие занимает всю ширину: попасть в него нужно
+   пальцем, а не прицеливаться */
+.cta .button { flex: 1 1 200px; }
+
+/* ─────────────────── формы ─────────────────── */
 
 .card {
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: 20px;
-    margin: 16px 0;
+    margin: 18px 0;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
 }
 
-label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--dim); }
-label.radio { flex-direction: row; align-items: center; gap: 8px; color: var(--text); }
-
-input[type=text], input[type=email], input[type=password], input[type=url], select, input[type=file] {
-    background: #0d1017;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 10px 12px;
-    color: var(--text);
+label {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    /* Микрозаголовок в разрядку — тот самый приём, которым отличается
+       дорогая типографика от обычной формы */
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--faint);
+}
+/* Выбор — это текст, который читают, а не подпись к полю */
+label.radio {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
     font-size: 15px;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text);
+    cursor: pointer;
+    /* Палец, а не курсор: строка выбора должна быть высотой с кнопку */
+    min-height: 44px;
 }
 
-fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
-legend { color: var(--dim); font-size: 13px; padding: 0 6px; }
+input[type=text], input[type=email], input[type=password], input[type=url],
+input[type=search], select, textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 13px 14px;
+    color: var(--text);
+    /* Ровно 16px и ни пикселем меньше: от мелкого шрифта Safari на iPhone
+       сам приближает страницу при касании поля и не отдаёт её обратно */
+    font: 16px/1.4 var(--sans);
+    transition: border-color .12s ease, background-color .12s ease;
+}
+input::placeholder, textarea::placeholder { color: var(--faint); }
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--gold);
+    background: var(--panel-hi);
+}
+
+input[type=file] {
+    width: 100%;
+    color: var(--dim);
+    font: 14px/1.4 var(--sans);
+}
+input[type=file]::file-selector-button {
+    background: var(--panel-hi);
+    color: var(--text);
+    border: 1px solid var(--line-hi);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-right: 12px;
+    font: 14px var(--sans);
+    cursor: pointer;
+}
+
+input[type=radio] { accent-color: var(--gold); width: 18px; height: 18px; }
+
+select {
+    /* Своя стрелка вместо системной: у нативной цвет берётся из темы
+       и на части телефонов остаётся чёрной на чёрном */
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--dim) 50%),
+                      linear-gradient(135deg, var(--dim) 50%, transparent 50%);
+    background-position: right 18px center, right 13px center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 38px;
+}
+
+fieldset {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 6px 14px 10px;
+    margin: 0;
+}
+legend {
+    color: var(--faint);
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 0 6px;
+}
+
+/* ─────────────────── кнопки ─────────────────── */
 
 .button {
-    display: inline-block;
-    background: var(--accent);
-    color: #fff;
-    border: 0;
-    border-radius: 8px;
-    padding: 11px 18px;
-    font-size: 15px;
-    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* 48 пикселей — размер подушечки пальца. Всё, что ниже, на телефоне
+       промахивается, и человек жмёт дважды */
+    min-height: 48px;
+    padding: 12px 22px;
+    background: var(--gold);
+    color: #17130b;
+    border: 1px solid var(--gold);
+    border-radius: var(--radius-sm);
+    font: 500 15px/1.2 var(--sans);
+    letter-spacing: 0.01em;
     text-align: center;
+    cursor: pointer;
+    transition: background-color .12s ease, border-color .12s ease, color .12s ease;
 }
-.button:hover { text-decoration: none; opacity: .92; }
-.button.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+.button:hover { background: var(--gold-hi); border-color: var(--gold-hi); text-decoration: none; }
+.button:disabled { opacity: .45; cursor: default; }
+
+.button.ghost {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--line-hi);
+}
+.button.ghost:hover { background: var(--panel-hi); border-color: var(--dim); color: var(--text); }
 
 .inline { display: inline; }
 button.link {
-    background: none; border: 0; color: var(--accent);
-    cursor: pointer; font-size: 15px; padding: 0;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--dim);
+    font: 14px var(--sans);
+    cursor: pointer;
 }
+button.link:hover { color: var(--gold); }
 
-small { color: var(--dim); font-size: 13px; }
-
-/* ── сообщения ── */
+/* ─────────────────── сообщения ─────────────────── */
 
 .ok, .error {
-    border-radius: 10px;
-    padding: 12px 16px;
-    margin: 0 0 20px;
+    /* Полоса слева вместо заливки во всю плашку: цвет обозначает,
+       а не кричит */
     border: 1px solid var(--line);
+    border-left: 2px solid var(--ok);
+    /* Слева край прямой: на скруглении полоска превращается в дугу
+       и выглядит случайной */
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    background: var(--panel);
+    padding: 14px 16px;
+    margin: 0 0 22px;
+    font-size: 15px;
 }
-.ok { color: var(--ok); }
-.error { color: var(--bad); }
+.ok { color: var(--text); }
+.error { border-left-color: var(--bad); color: var(--text); }
 .bad { color: var(--bad); }
 
-.counter { color: var(--dim); }
+.counter { color: var(--dim); font-size: 14px; }
 
+/* Код входа: его переписывают глазами в другое окно, поэтому крупно
+   и с разрядкой между знаками */
 .code {
-    font: 22px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-    letter-spacing: 4px;
-    background: var(--panel);
-    border: 1px dashed var(--accent);
-    border-radius: 10px;
-    padding: 14px 18px;
     display: inline-block;
+    font: 20px/1.3 var(--mono);
+    letter-spacing: 0.28em;
+    color: var(--gold);
+    background: var(--panel);
+    border: 1px solid var(--line-hi);
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
 }
 
-/* ── история ── */
+/* Число сверки при входе через бота. Крупно и отдельно от всего: его надо
+   найти взглядом за секунду и сравнить с тем, что предлагает бот, — мелкая
+   строчка в общем потоке текста этой работы не делает */
+.check-number {
+    font: 700 44px/1 var(--mono);
+    letter-spacing: 0.1em;
+    color: var(--gold);
+    background: var(--panel);
+    border: 1px solid var(--line-hi);
+    border-radius: var(--radius-sm);
+    padding: 18px 24px;
+    margin: 20px 0;
+    text-align: center;
+}
 
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th { text-align: left; color: var(--dim); font-weight: 500; padding: 8px 10px; }
-td { padding: 12px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+/* ─────────────────── способы входа ─────────────────── */
 
-.when { color: var(--dim); white-space: nowrap; }
-.what .title { display: block; word-break: break-all; }
-.why { display: block; }
+.providers {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+}
+/* Виджет Telegram — чужой iframe, покрасить его нельзя. Значит, хотя бы
+   поставим по центру, чтобы он не выглядел приклеенным сбоку */
+.providers iframe { align-self: center; }
+.providers form { display: flex; }
+.providers form .button { flex: 1; }
+.providers .google {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    border: 1px solid var(--line-hi);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 15px;
+}
+.providers .google:hover { background: var(--panel-hi); text-decoration: none; }
 
+/* ─────────────────── фишки и метки ─────────────────── */
+
+/*
+  Фишка — всё, что можно нажать в строке истории: скачать формат, открыть
+  расшифровку, остановить задачу. Одна форма на все действия, потому что
+  человек выбирает между ними, а не между «главным» и «остальными».
+*/
+.chip {
+    display: inline-flex;
+    align-items: center;
+    /* На телефоне это основной способ что-то сделать со сделанной задачей,
+       и промахиваться по нему нельзя */
+    min-height: 38px;
+    padding: 6px 14px;
+    margin: 0 6px 6px 0;
+    border: 1px solid var(--line-hi);
+    border-radius: 999px;
+    color: var(--text);
+    font-size: 14px;
+    white-space: nowrap;
+    transition: border-color .12s ease, background-color .12s ease;
+}
+.chip:hover { background: var(--panel-hi); border-color: var(--dim); text-decoration: none; }
+/* «Открыть» — то, ради чего сюда пришли: единственная золотая фишка в строке */
+.chip.open { border-color: var(--gold); color: var(--gold); }
+.chip.insight { color: var(--dim); }
+.chip.stop {
+    background: none;
+    border-color: color-mix(in srgb, var(--bad) 55%, var(--line));
+    color: var(--bad);
+    font: 14px var(--sans);
+    cursor: pointer;
+}
+
+/* Метка — не действие, а свойство записи: её не жмут, поэтому она мельче
+   и без рамки-таблетки вокруг всей строки */
 .tag {
     display: inline-block;
+    margin: 6px 6px 0 0;
+    padding: 2px 9px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--faint);
     font-size: 12px;
-    color: var(--dim);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 1px 8px;
-    margin-top: 4px;
+    letter-spacing: 0.02em;
 }
 
-.files { white-space: nowrap; }
-.chip {
-    display: inline-block;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 3px 10px;
-    margin: 0 4px 4px 0;
-    font-size: 13px;
-}
+/* ─────────────────── история задач ─────────────────── */
 
-.providers { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.google {
+/*
+  На телефоне таблица из четырёх колонок нечитаема при любом обращении с ней:
+  она либо уезжает вбок, либо режет ссылки по буквам. Поэтому по умолчанию
+  строка здесь — карточка, а таблицей она становится только на широком экране,
+  где колонки действительно помогают сравнивать строки между собой.
+*/
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+thead { display: none; }
+tbody, tr, td { display: block; }
+
+tr {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 10px 18px;
+    border-radius: var(--radius);
+    padding: 16px;
+    margin: 0 0 12px;
+}
+td { padding: 0; border: 0; }
+
+/* Порядок в карточке — по важности вопроса: что это, чем кончилось,
+   что с этим можно сделать, и только потом когда */
+td.what { order: 1; }
+td.how  { order: 2; margin-top: 10px; }
+td.files { order: 3; margin-top: 12px; }
+td.when { order: 4; margin-top: 10px; }
+
+.what .title {
+    display: block;
+    font-size: 16px;
+    /* Ссылки на видео длиннее любого экрана и разрывать их по словам нечем */
+    overflow-wrap: anywhere;
+}
+.when { color: var(--faint); font-size: 13px; }
+.why { display: block; color: var(--dim); font-size: 13px; margin-top: 2px; }
+.files { line-height: 1; }
+
+/* ─────────────────── поиск ─────────────────── */
+
+.inline-search { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 20px; }
+.inline-search input[type=search] { flex: 1 1 220px; }
+.inline-search .button { flex: 0 0 auto; }
+
+.hits { margin-top: 8px; }
+.hit {
+    display: block;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
     color: var(--text);
 }
+.hit:hover { text-decoration: none; }
+.hit:hover .quote { color: var(--text); }
+.hit .when { display: inline-block; margin-right: 10px; color: var(--gold); font-size: 13px; }
+.hit .title { display: inline; color: var(--faint); font-size: 13px; overflow-wrap: anywhere; }
+.hit .quote { display: block; margin-top: 6px; color: var(--dim); }
+.hit .mark { color: var(--text); background: rgba(200, 169, 107, .18); border-radius: 3px; }
 
-/* ── расшифровка: плеер и реплики ── */
+/* ─────────────────── расшифровка ─────────────────── */
 
-.source { word-break: break-all; font-size: 15px; }
+.source { overflow-wrap: anywhere; font-size: 15px; }
 
 #player {
     width: 100%;
-    max-height: 380px;
-    background: #000;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    /* Липкий плеер: реплик бывают сотни, и, прокрутив список, человек
-       не должен искать перемотку в начале страницы */
+    /* Липкий плеер: реплик бывают сотни, и, прокрутив список, человек не
+       должен искать перемотку в начале страницы. Но и половину телефона
+       он занимать не должен — отсюда предел по высоте экрана */
     position: sticky;
     top: 0;
-    z-index: 1;
+    z-index: 2;
+    max-height: 38vh;
+    margin-bottom: 20px;
+    background: #000;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
 }
 
-.speakers .speaker { margin: 14px 0; }
-.speakers label { flex-direction: row; align-items: center; gap: 10px; }
+.speakers .speaker + .speaker { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
 
 /*
   Первая фраза голоса — подпись под полем имени: по ней человека и узнают.
@@ -208,131 +620,235 @@ td { padding: 12px 10px; border-top: 1px solid var(--line); vertical-align: top;
 .speakers .sample {
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    margin: 4px 0 0;
-    color: var(--dim);
+    gap: 6px;
+    margin: 8px 0 0;
+    color: var(--faint);
     font-size: 13px;
-    white-space: nowrap;
+}
+.speakers .sample span {
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.lines { margin: 20px 0; }
-.line { padding: 4px 0; }
-.line .who { color: var(--accent); margin: 16px 0 4px; font-size: 14px; }
-.line .row { display: flex; gap: 10px; align-items: flex-start; }
+.lines { margin: 24px 0; }
+/*
+  Здесь напрашивается content-visibility: auto — реплик в часовой записи
+  бывают тысячи, и не считать невидимые выглядит очевидной экономией. Так вот:
+  не работает. Chrome рисует внутри такой реплики поле ввода собственной серой
+  подложкой вместо заданной, и список превращается в лесенку светлых плашек.
+  Проверено на Chrome 151; если соберётесь вернуть — сначала посмотрите
+  на страницу глазами, а не на цифры.
+*/
+.line { padding: 2px 0; }
+.line .who {
+    margin: 20px 0 6px;
+    color: var(--gold);
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+.line .row { display: flex; gap: 8px; align-items: flex-start; }
 .line textarea {
     flex: 1;
+    min-width: 0;
+    /*
+      Чуть светлее страницы — и не ради красоты: реплику здесь правят, и по
+      сплошному тексту без единого признака поля этого не понять. Разница
+      в один тон подсказывает, не превращая список в лесенку карточек.
+
+      Прозрачным этот фон быть не может: Chrome подставляет прозрачному полю
+      собственную серую подложку, и реплики становятся светлыми плашками.
+    */
     background: var(--panel);
     color: var(--text);
     border: 1px solid transparent;
-    border-radius: 6px;
-    padding: 6px 8px;
-    font: inherit;
+    border-radius: 8px;
+    padding: 7px 9px;
+    font: 16px/1.5 var(--sans);
     resize: vertical;
 }
-.line textarea:focus { border-color: var(--line); outline: none; }
+.line textarea:focus { background: var(--panel-hi); border-color: var(--line-hi); }
 /* Реплика, которая звучит сейчас, и реплика, которую уже правили руками */
-.line.now textarea { border-color: var(--accent); }
+.line.now textarea { background: var(--panel-hi); border-color: var(--gold); }
 .line.edited textarea { border-left: 2px solid var(--ok); }
 
 .at {
     flex: none;
-    width: 62px;
-    padding: 6px 0;
+    width: 46px;
+    /* Отступ подобран так, чтобы время встало вровень с первой строкой
+       реплики: у них разные шрифты и разная высота строки */
+    padding: 9px 0;
     background: transparent;
-    color: var(--dim);
+    color: var(--faint);
     border: none;
-    font: inherit;
+    font: 13px/1.4 var(--mono);
     font-variant-numeric: tabular-nums;
+    text-align: left;
     cursor: pointer;
 }
-.at:hover { color: var(--accent); }
+.at:hover { color: var(--gold); }
+/* Та же кнопка времени, но внутри строки текста выжимки */
+.at.inline { width: auto; padding: 0 3px; color: var(--gold); }
 
-.chip.open { border-color: var(--accent); color: var(--accent); }
-/* Обработка моделью — вторая по важности после чтения, но не главная */
-.chip.insight { border-color: var(--line); }
+/* ─────────────────── обработка моделью ─────────────────── */
 
-/*
-  «Остановить» стоит в одном ряду со ссылками на файлы, поэтому и выглядит
-  так же — фишкой, а не кнопкой формы. Форма вокруг неё нужна только ради
-  POST: ссылка, меняющая состояние, открывалась бы предпросмотром мессенджера.
-*/
-form.inline { display: inline; }
-.chip.stop {
-    background: none;
-    color: var(--bad, #d9534f);
-    border-color: var(--bad, #d9534f);
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
-}
-
-/* ── поиск ── */
-
-.search input[type=search], .inline-search input[type=search] {
-    width: 100%;
-    padding: 10px 12px;
-    background: var(--bg);
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    font: inherit;
-}
-.inline-search { display: flex; gap: 10px; margin: 0 0 16px; }
-.inline-search input[type=search] { flex: 1; }
-
-.hit {
+.insights { margin: 40px 0; }
+.insights .orders { display: flex; flex-direction: column; gap: 16px; }
+.insights .order {
     display: flex;
+    flex-direction: column;
     gap: 12px;
-    padding: 12px 10px;
-    border-top: 1px solid var(--line);
-    color: var(--text);
-}
-.hit:hover { background: var(--panel); text-decoration: none; }
-.hit .what { display: block; }
-.hit .title { display: block; color: var(--dim); font-size: 13px; word-break: break-all; }
-.hit .quote { display: block; margin-top: 4px; }
-.hit .mark { color: var(--accent); font-weight: 600; }
-
-/* ── обработка текста моделью ── */
-
-.insights { margin: 28px 0; }
-.insights .orders { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: flex-end; }
-.insights .order { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
-.insights .order label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--dim); }
-.insights select, .insights .order input[type=text] {
-    padding: 9px 10px;
-    background: var(--bg);
-    color: var(--text);
+    background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 8px;
-    font: inherit;
+    border-radius: var(--radius);
+    padding: 18px;
+    margin: 0;
 }
-.insights .order input[type=text] { min-width: 240px; }
+.insights .order label { gap: 8px; }
 
 .insight { margin: 16px 0; }
-.insight header { display: flex; gap: 12px; align-items: baseline; }
-.insight .what { font-weight: 600; }
+.insight header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    align-items: baseline;
+}
+.insight .what { font-family: var(--serif); font-size: 17px; }
 .insight .state { color: var(--dim); font-size: 13px; }
-.insight .state.bad { color: var(--bad, #e06c75); }
+.insight .state.bad { color: var(--bad); }
 /* Время заказа прижато вправо: в шапке важнее то, что слева */
-.insight .when { margin-left: auto; color: var(--dim); font-size: 13px; }
+.insight .when { margin-left: auto; }
+.insight .drop { margin-left: 4px; }
 .insight .drop button {
     background: none;
     border: none;
-    color: var(--dim);
-    font-size: 18px;
-    line-height: 1;
+    color: var(--faint);
+    font: 20px/1 var(--sans);
+    padding: 4px 6px;
     cursor: pointer;
 }
 .insight .drop button:hover { color: var(--text); }
-
 /* Переносы строк модель ставит сама — они и есть структура её ответа */
-.insight .body { white-space: pre-wrap; margin: 10px 0 0; }
-/* Та же кнопка времени, что у реплик, но внутри строки текста */
-.at.inline {
-    width: auto;
-    padding: 0 4px;
-    color: var(--accent);
+.insight .body { white-space: pre-wrap; margin: 12px 0 0; }
+
+.exports { margin: 40px 0; }
+
+/* ─────────────────── разделы кабинета ─────────────────── */
+
+/*
+  Кабинет — четыре разных разговора подряд: квота, новая задача, бот, история.
+  Волосяная линия между ними стоит дешевле любого заголовка и делает ровно то,
+  что нужно на телефоне: показывает, где кончается одно и начинается другое.
+*/
+.new, .telegram, .history {
+    margin-top: 40px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+}
+.quota .counter { margin-bottom: 0; }
+/* Заголовок раздела уже отделён линией сверху — свой большой отступ
+   ему здесь ни к чему, иначе между разделами зияет пустота */
+.new > h2:first-child,
+.telegram > h2:first-child,
+.history > h2:first-child { margin-top: 24px; }
+
+/* ─────────────────── экран пошире ─────────────────── */
+
+/*
+  Всё выше написано для телефона, потому что с него приходят почти все.
+  Ниже — только то, что на большом экране действительно работает лучше:
+  колонки вместо карточек, заголовки крупнее, действия в строку.
+*/
+@media (min-width: 640px) {
+    :root { --pad: 32px; }
+
+    h1 { font-size: 40px; margin-bottom: 18px; }
+    h2 { font-size: 24px; margin-top: 48px; }
+
+    .page { padding-top: 44px; }
+    .lead { font-size: 19px; }
+
+    .cta .button { flex: 0 0 auto; }
+
+    .card { padding: 24px; }
+
+    .providers { flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; }
+    .providers form, .providers .google { flex: 0 1 auto; }
+
+    /* История снова становится таблицей: на широком экране колонки дают то,
+       чего не даёт карточка, — строки можно сравнивать взглядом сверху вниз */
+    table { font-size: 14px; }
+    thead { display: table-header-group; }
+    tbody { display: table-row-group; }
+    tr {
+        display: table-row;
+        background: none;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        margin: 0;
+    }
+    th {
+        text-align: left;
+        padding: 0 12px 10px 0;
+        color: var(--faint);
+        font: 500 11px/1.4 var(--sans);
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        border-bottom: 1px solid var(--line);
+    }
+    td {
+        display: table-cell;
+        padding: 16px 12px 16px 0;
+        border-top: 1px solid var(--line);
+        vertical-align: top;
+    }
+    td.what, td.how, td.files, td.when { order: 0; margin: 0; }
+    td.when { white-space: nowrap; }
+    td.files { padding-right: 0; }
+    .what .title { font-size: 14px; }
+
+    .insights .orders { flex-direction: row; flex-wrap: wrap; }
+    .insights .order { flex: 1 1 320px; }
+
+    .speakers .speaker { display: flex; align-items: baseline; gap: 20px; }
+    .speakers .speaker label { flex: 0 0 260px; }
+    .speakers .sample { margin: 0; flex: 1; min-width: 0; }
+
+    .at { width: 56px; font-size: 14px; }
+    #player { max-height: 420px; }
+}
+
+@media (min-width: 900px) {
+    .page { padding-top: 56px; }
+    h1 { font-size: 46px; }
+}
+
+/* ─────────────────── первая страница ─────────────────── */
+
+/*
+  Надзаголовок в разрядку: он объясняет, о чём сайт, раньше, чем человек
+  дочитает заголовок, и стоит при этом одну строку.
+*/
+.eyebrow {
+    margin: 0 0 14px;
+    color: var(--gold);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.hero { padding: 8px 0 8px; }
+/* Перенос в заголовке проставлен руками и на телефоне только мешает:
+   строка и так короткая, а разрыв делает её рваной */
+.hero h1 br { display: none; }
+.hero .lead { max-width: 34em; }
+.hero .providers { margin-top: 20px; }
+
+@media (min-width: 640px) {
+    .hero { padding: 24px 0 16px; }
+    .hero h1 { font-size: 54px; }
+    .hero h1 br { display: inline; }
+    .hero .providers { justify-content: flex-start; }
 }

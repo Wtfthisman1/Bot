@@ -1,55 +1,38 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="ru">
 <!--
-  Своя голова документа, а не общий фрагмент: только этой странице нужен
-  meta refresh, которым она сама себя опрашивает, пока человек подтверждает
-  вход в Telegram. Обновление страницей, а не скриптом, — чтобы вход работал
-  и с выключенным JavaScript.
+  Страница по ссылке из чата. Обновлять себя ей больше не нужно: подтверждения
+  никто не ждёт — ссылку выдал бот тому, кто её попросил, и остаётся только
+  нажать. Поэтому здесь обычная голова документа, без meta refresh.
 -->
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#0c0c0d">
-    <meta http-equiv="refresh" content="3">
-    <title>Вход через бота — Транскрибот</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%230c0c0d'/%3E%3Cg%20fill='%23c8a96b'%3E%3Crect%20x='6.6'%20y='13'%20width='2.6'%20height='6'%20rx='1.3'/%3E%3Crect%20x='11.8'%20y='8.5'%20width='2.6'%20height='15'%20rx='1.3'/%3E%3Crect%20x='17'%20y='11'%20width='2.6'%20height='10'%20rx='1.3'/%3E%3Crect%20x='22.2'%20y='14.2'%20width='2.6'%20height='3.6'%20rx='1.3'/%3E%3C/g%3E%3C/svg%3E">
-    <link rel="stylesheet" href="/css/site.css?v=2">
-</head>
+<head th:replace="~{fragments :: head('Вход через бота')}"></head>
 <body>
 <header th:replace="~{fragments :: header(null)}"></header>
 
 <main class="page narrow">
-    <h1>Подтвердите вход в Telegram</h1>
+    <h1>Войти в кабинет</h1>
 
-    <p class="lead">Откройте бота и выберите там это число. Как только
-        подтвердите — эта страница сама откроет кабинет.</p>
-
-    <!--
-      Число, а не просто кнопка «да»: подтверждать должен тот, кто видит эту
-      страницу. Раньше хватало нажатия в чате, и достаточно было прислать
-      постороннему ссылку на бота, чтобы он подтвердил чужой вход.
-    -->
-    <p class="check-number" th:text="${checkNumber}">42</p>
-
-    <p>
-        <a class="button" th:href="${botLink}" target="_blank" rel="noopener">
-            Открыть Telegram
-        </a>
+    <p class="lead" th:if="${name != null and !name.isEmpty()}">
+        Ссылка ведёт в аккаунт <b th:text="${name}">Имя</b>.
+    </p>
+    <p class="lead" th:unless="${name != null and !name.isEmpty()}">
+        Ссылка ведёт в аккаунт, привязанный к чату с ботом.
     </p>
 
     <!--
-      Запасной путь нужен не для красоты: если чат с ботом уже открыт, часть
-      клиентов Telegram не пересылает нагрузку ссылки, и человек видит одно
-      приветствие. Команда руками делает ровно то же самое.
+      Вход завершает нажатие, а не открытие адреса. По ссылкам ходят не только
+      люди: Telegram тянет предпросмотр, антивирусы и почтовые фильтры
+      открывают их сами — и вход сгорал бы до того, как человек его увидит.
     -->
-    <p class="hint">Если бот ответил только приветствием, отправьте ему это
-        сообщение — оно то же самое, что и ссылка:</p>
-    <p><code class="code" th:text="'/start login_' + ${code}">/start login_КОД</code></p>
+    <form method="post" th:action="@{/auth/enter}">
+        <input type="hidden" name="token" th:value="${token}">
+        <button type="submit" class="button">Войти</button>
+    </form>
 
-    <p class="hint">Ссылка действует пять минут. Номер телефона не нужен.</p>
-    <p class="hint">Если в боте нет числа, показанного здесь, — вход начали не вы.
-        Нажмите там «Это не я».</p>
-    <p class="hint"><a href="/login">Вернуться к другим способам входа</a></p>
+    <p class="hint">Ссылка одноразовая и действует три минуты.</p>
+    <p class="hint">Если вы не просили вход в боте — просто закройте эту
+        страницу и никому не пересылайте ссылку.</p>
+    <p class="hint"><a href="/login">Другие способы входа</a></p>
 </main>
 
 <footer th:replace="~{fragments :: footer}"></footer>

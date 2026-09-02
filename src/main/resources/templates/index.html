@@ -5,25 +5,39 @@
 <header th:replace="~{fragments :: header(null)}"></header>
 
 <main class="page">
-    <h1>Расшифровка аудио и видео в текст</h1>
-    <p class="lead">
-        Пришлите ссылку или файл — вернём текст, субтитры и документ Word.
-        Распознаёт Whisper на видеокарте, язык определяется сам.
-    </p>
 
-    <ul class="facts">
-        <li>Три бесплатные расшифровки в месяц</li>
-        <li>Ссылки на YouTube, VK, Rutube и другие площадки</li>
-        <li>Форматы на выходе: текст, SRT, VTT, Word</li>
-        <li>То же самое работает в Telegram — аккаунт общий</li>
-    </ul>
+    <!--
+      Первый экран телефона — это примерно шесть строк. В них помещается ровно
+      одно: что здесь делают и куда нажать. Список возможностей стоит ниже: его
+      читают те, кто ещё сомневается, а таких меньшинство.
+    -->
+    <section class="hero">
+        <p class="eyebrow">Расшифровка речи</p>
+        <h1>Аудио и видео <br>в текст</h1>
+        <p class="lead">
+            Пришлите ссылку или файл — вернём текст, субтитры и документ Word.
+            Распознаёт Whisper на видеокарте, язык определяется сам.
+        </p>
 
-    <div class="cta">
-        <a class="button" href="/register">Зарегистрироваться</a>
-        <a class="button ghost" href="/login">Войти</a>
-    </div>
+        <div class="cta">
+            <a class="button" href="/register">Зарегистрироваться</a>
+            <a class="button ghost" href="/login">Войти</a>
+        </div>
 
-    <div th:replace="~{fragments :: providers(${botName}, ${googleEnabled})}"></div>
+        <div th:replace="~{fragments :: providers(${botName}, ${googleEnabled})}"></div>
+    </section>
+
+    <section>
+        <h2>Что входит</h2>
+        <ul class="facts">
+            <li>Три бесплатные расшифровки в месяц</li>
+            <li>Ссылки на YouTube, VK, Rutube и другие площадки</li>
+            <li>Форматы на выходе: текст, SRT, VTT, Word</li>
+            <li>Правка текста рядом с записью и поиск по всем расшифровкам</li>
+            <li>То же самое работает в Telegram — аккаунт общий</li>
+        </ul>
+    </section>
+
 </main>
 
 <footer th:replace="~{fragments :: footer}"></footer>

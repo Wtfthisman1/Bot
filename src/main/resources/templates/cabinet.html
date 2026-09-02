@@ -61,8 +61,8 @@
 
     <!--
       Блок нужен не всем: вошедшему через Telegram привязывать нечего, у него
-      чат и аккаунт — одно целое. Остальным объясняем, что это даёт, и уводим
-      в бота ссылкой с кодом внутри: набирать команду руками не нужно.
+      чат и аккаунт — одно целое. Остальным объясняем, что это даёт, и выдаём
+      код, который они наберут боту сами.
     -->
     <section class="telegram">
         <h2>Бот в Telegram</h2>
@@ -85,20 +85,75 @@
                 <button type="submit" class="button">Подключить Telegram</button>
             </form>
 
+            <!--
+              Кода в ссылку больше не кладём. Раньше здесь была кнопка
+              «Подтвердить в Telegram» с адресом ?start=link_<код>, и хватало
+              одного нажатия в боте. Такую ссылку можно было прислать чужому
+              человеку под видом своей: он нажимал «Да, это мой аккаунт» и
+              отдавал отправителю свою переписку вместе со всеми расшифровками.
+              Теперь код набирают руками, глядя в этот кабинет.
+            -->
             <div th:if="${linkCode}">
-                <p>Осталось подтвердить в Telegram — откроется чат с ботом, нажмите
-                    в нём «Да, это мой аккаунт»:</p>
+                <p>Отправьте боту это сообщение — чат станет вашим:</p>
+                <p><code class="code" th:text="'/link ' + ${linkCode}">/link КОД</code></p>
                 <p>
-                    <a class="button" target="_blank" rel="noopener"
-                       th:href="'https://t.me/' + ${botName} + '?start=link_' + ${linkCode}">
-                        Подтвердить в Telegram
-                    </a>
+                    <a class="button ghost" target="_blank" rel="noopener"
+                       th:href="'https://t.me/' + ${botName}">Открыть бота</a>
                 </p>
-                <p class="hint">Если ссылка не открылась, отправьте боту сообщение
-                    <code th:text="'/link ' + ${linkCode}">/link КОД</code> — это то же самое.
-                    Код действует 15 минут.</p>
+                <p class="hint">Код действует 15 минут. ❗ Никому его не показывайте:
+                    кто пришлёт его боту, тот и заберёт эту переписку себе.</p>
             </div>
         </div>
+
+        <!--
+          Ответ на сообщение «в ваш аккаунт вошли», которое бот присылает после
+          каждого входа по ссылке. Без этой кнопки предупреждать было бы не о
+          чем: сессия живёт месяц, и закрыть чужую было нечем.
+        -->
+        <form method="post" th:action="@{/cabinet/sessions/close}" class="inline">
+            <button type="submit" class="button ghost">Выйти на всех устройствах</button>
+        </form>
+        <p class="hint">Закроет все сеансы, кроме этого. Пригодится, если вы
+            переслали кому-то ссылку входа.</p>
+    </section>
+
+    <!--
+      Пароль. Блок виден только тем, у кого есть почта: вход по паролю ищет
+      человека по адресу, и без адреса пароль не работает вовсе.
+
+      Поля «текущий пароль» здесь может не быть — и это не упущение. Сброса по
+      письму у нас нет, слать письма нечем; вместо него работает вторая дверь:
+      вошедший через бота, Telegram или Google уже доказал, что аккаунт его.
+      Вошедший паролем старый пароль вводит.
+    -->
+    <section class="password" th:if="${passwordEmail}">
+        <h2 th:text="${passwordSet} ? 'Пароль' : 'Пароль для входа по почте'">Пароль</h2>
+
+        <p th:unless="${passwordSet}">Сейчас в этот аккаунт входят через Telegram или
+            Google. Если задать пароль, войти можно будет и по почте.</p>
+        <p th:if="${passwordSet and !passwordAsksCurrent}">Вы вошли не паролем, поэтому
+            старый можно не вспоминать — так пароль здесь и восстанавливают.</p>
+
+        <form method="post" th:action="@{/cabinet/password}" class="card">
+            <label th:if="${passwordSet and passwordAsksCurrent}">Текущий пароль
+                <input type="password" name="currentPassword" autocomplete="current-password"
+                       required>
+            </label>
+            <!-- Подпись отдельным элементом: th:text на самом label затёр бы
+                 вложенное поле вместе с текстом -->
+            <label>
+                <span th:text="${passwordSet} ? 'Новый пароль' : 'Пароль'">Новый пароль</span>
+                <input type="password" name="newPassword" autocomplete="new-password"
+                       minlength="8" required>
+            </label>
+            <button type="submit" class="button"
+                    th:text="${passwordSet} ? 'Сменить пароль' : 'Задать пароль'">Сменить пароль</button>
+        </form>
+
+        <p class="hint">Не короче 8 символов. Пароли из списков подбора
+            («12345678», «qwerty123» и подобные) не принимаются — лучше всего
+            длинная фраза. После смены остальные сеансы закроются, а в чат
+            придёт сообщение.</p>
     </section>
 
     <section class="history">
@@ -139,7 +194,7 @@
                     <span class="tag" th:text="${job.kind()}">вид</span>
                     <span th:if="${job.fromTelegram()}" class="tag tg">из Telegram</span>
                 </td>
-                <td>
+                <td class="how">
                     <span th:classappend="${job.failed()} ? 'bad' : ''" th:text="${job.state()}">состояние</span>
                     <small th:if="${job.error()}" class="why" th:text="${job.error()}">причина</small>
                 </td>
@@ -180,6 +235,6 @@
 </main>
 
 <footer th:replace="~{fragments :: footer}"></footer>
-<script src="/js/cabinet.js" defer></script>
+<script src="/js/cabinet.js?v=2" defer></script>
 </body>
 </html>

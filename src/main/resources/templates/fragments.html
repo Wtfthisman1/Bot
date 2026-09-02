@@ -8,17 +8,46 @@
 -->
 <html xmlns:th="http://www.thymeleaf.org" lang="ru">
 
+<!--
+  В голове документа нет ничего, что задерживало бы первую отрисовку, кроме
+  одного файла стилей. Он один на весь сайт и кэшируется навсегда (адрес
+  версионирован), поэтому платит за него только первая открытая страница,
+  а все следующие переходы рисуются без единого запроса.
+
+  Значок — не файл, а сама картинка в адресе: браузер всё равно просит
+  /favicon.ico на каждой странице, и без этой строки каждый такой запрос
+  оканчивался бы 404.
+-->
 <head th:fragment="head(title)">
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- viewport-fit=cover пускает страницу под вырез экрана; отступы под него
+         берёт на себя env(safe-area-inset-*) в стилях -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <!-- Цвет строки браузера на телефоне: без него у страницы остаётся
+         светлая шапка поверх тёмного сайта -->
+    <meta name="theme-color" content="#0c0c0d">
     <title th:text="${title} + ' — Транскрибот'">Транскрибот</title>
-    <link rel="stylesheet" href="/css/site.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%230c0c0d'/%3E%3Cg%20fill='%23c8a96b'%3E%3Crect%20x='6.6'%20y='13'%20width='2.6'%20height='6'%20rx='1.3'/%3E%3Crect%20x='11.8'%20y='8.5'%20width='2.6'%20height='15'%20rx='1.3'/%3E%3Crect%20x='17'%20y='11'%20width='2.6'%20height='10'%20rx='1.3'/%3E%3Crect%20x='22.2'%20y='14.2'%20width='2.6'%20height='3.6'%20rx='1.3'/%3E%3C/g%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/css/site.css?v=2">
 </head>
 
 <body>
 
+<!--
+  Знак вместо эмодзи в названии: эмодзи рисует система, и у каждой он свой —
+  на одном телефоне это наушники, на другом квадрат. Четыре полоски — это
+  звуковая дорожка, тот же знак стоит и в значке вкладки.
+-->
 <header th:fragment="header(account)" class="top">
-    <a class="brand" href="/">🎧 Транскрибот</a>
+    <a class="brand" href="/">
+        <svg width="19" height="19" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+            <rect x="6.6" y="13" width="2.6" height="6" rx="1.3"/>
+            <rect x="11.8" y="8.5" width="2.6" height="15" rx="1.3"/>
+            <rect x="17" y="11" width="2.6" height="10" rx="1.3"/>
+            <rect x="22.2" y="14.2" width="2.6" height="3.6" rx="1.3"/>
+        </svg>
+        <span>Транскрибот</span>
+    </a>
     <nav>
         <span th:if="${account != null}" class="who" th:text="${account.title()}">кто</span>
         <form th:if="${account != null}" method="post" th:action="@{/logout}" class="inline">
@@ -57,10 +86,15 @@
             data-size="large"
             data-request-access="write"></script>
 
-    <form th:if="${botName != null and !botName.isEmpty()}"
-          method="post" th:action="@{/auth/bot}">
-        <button type="submit" class="button ghost">Войти через бота, без номера</button>
-    </form>
+    <!--
+      Ссылка на бота, а не форма: вход отсюда больше не начинается. Раньше
+      страница заводила код, а подтверждать его шли в чат — и код можно было
+      прислать постороннему, чтобы он подтвердил чужой вход. Теперь ссылку
+      выдаёт бот тому, кто нажал в нём кнопку, и прислать чужому нечего.
+    -->
+    <a th:if="${botName != null and !botName.isEmpty()}" class="button ghost"
+       th:href="'https://t.me/' + ${botName} + '?start=login'"
+       target="_blank" rel="noopener">Войти через бота, без пароля</a>
 
     <a th:if="${googleEnabled}" class="google" href="/oauth2/authorization/google">
         Войти через Google
