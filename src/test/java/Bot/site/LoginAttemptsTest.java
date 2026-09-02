@@ -18,6 +18,8 @@ class LoginAttemptsTest {
     void setUp() {
         ReflectionTestUtils.setField(attempts, "maxAttempts", 3);
         ReflectionTestUtils.setField(attempts, "windowMinutes", 15);
+        ReflectionTestUtils.setField(attempts, "maxRegistrations", 2);
+        ReflectionTestUtils.setField(attempts, "registrationWindowMinutes", 60);
     }
 
     @Test
@@ -42,6 +44,59 @@ class LoginAttemptsTest {
         attempts.failed(request);
 
         assertThat(attempts.allows(request)).isTrue();
+    }
+
+    /**
+     * Удачная регистрация тоже тратит попытку.
+     *
+     * <p>Считались только неудачи, и один адрес мог штамповать аккаунты без
+     * счёта. Каждый новый аккаунт — это ещё три бесплатные расшифровки, то
+     * есть чужое время на видеокарте: квота по аккаунту не значит ничего, пока
+     * аккаунты бесплатны и бесконечны.</p>
+     */
+    @Test
+    void successfulRegistrationsAreCountedToo() {
+        MockHttpServletRequest request = from("203.0.113.7");
+
+        attempts.spend(request);
+        attempts.spend(request);
+        assertThat(attempts.allows(request)).isTrue();
+
+        attempts.spend(request);
+        assertThat(attempts.allows(request)).isFalse();
+    }
+
+    /**
+     * У регистрации свой, более строгий счёт.
+     *
+     * <p>Форма регистрации отвечает «на эту почту аккаунт уже заведён», и по
+     * этому ответу перебором узнают, кто здесь есть. Убрать сам ответ нечем,
+     * пока писем слать нечем, — поэтому ограничена скорость перебора.</p>
+     */
+    @Test
+    void registrationHasItsOwnBudget() {
+        MockHttpServletRequest request = from("203.0.113.7");
+
+        assertThat(attempts.allowsRegistration(request)).isTrue();
+        attempts.spendRegistration(request);
+        assertThat(attempts.allowsRegistration(request)).isTrue();
+        attempts.spendRegistration(request);
+
+        assertThat(attempts.allowsRegistration(request)).isFalse();
+        // Вход при этом не заперт: счётчики разные
+        assertThat(attempts.allows(request)).isTrue();
+    }
+
+    /** Удачный вход прощает неудачные — но не съеденные регистрации. */
+    @Test
+    void successfulLoginDoesNotRefillRegistrations() {
+        MockHttpServletRequest request = from("203.0.113.7");
+        attempts.spendRegistration(request);
+        attempts.spendRegistration(request);
+
+        attempts.succeeded(request);
+
+        assertThat(attempts.allowsRegistration(request)).isFalse();
     }
 
     @Test

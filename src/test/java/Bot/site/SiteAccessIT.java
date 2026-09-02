@@ -35,6 +35,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -166,45 +167,175 @@ class SiteAccessIT {
     }
 
     /**
-     * Вход через бота целиком: страница ждёт, чат подтверждает, браузер входит.
+     * Вход через бота целиком: бот выдал ссылку, браузер её открыл и нажал.
      *
-     * <p>Подтверждение здесь вызывается напрямую — в бою его делает нажатие
-     * кнопки в чате, которое приходит на другую половину приложения.</p>
+     * <p>Ссылка здесь заводится напрямую — в бою её просит кнопка в чате,
+     * которая приходит на другую половину приложения.</p>
      */
     @Test
-    void botLoginSignsInAfterConfirmation() throws Exception {
-        MvcResult started = mvc.perform(post("/auth/bot").with(csrf()))
-                .andExpect(redirectedUrl("/auth/bot/wait"))
-                .andReturn();
-        var session = session(started);
+    void botLinkSignsInWhenOpenedAndConfirmed() throws Exception {
+        String token = tokenOf(botLogins.issue(4242L, "Аня").orElseThrow());
 
-        // Пока подтверждения нет — страница ожидания со ссылкой на бота
-        mvc.perform(get("/auth/bot/wait").session(session))
+        // Страница называет аккаунт, но входа ещё не делает
+        mvc.perform(get("/auth/enter/" + token))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("t.me/")));
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Аня")));
 
-        String code = (String) session.getAttribute("botLoginCode");
-        // Число берём из той же сессии: именно его показывает страница, и
-        // именно совпадение с ним подтверждает вход
-        int number = (Integer) session.getAttribute("botLoginNumber");
-        assertThat(botLogins.confirm(4242L, code, "Аня", number))
-                .isEqualTo(Bot.account.BotLoginService.Confirmation.CONFIRMED);
+        MvcResult entered = mvc.perform(post("/auth/enter").param("token", token).with(csrf()))
+                .andExpect(redirectedUrl("/cabinet"))
+                .andReturn();
 
-        mvc.perform(get("/auth/bot/wait").session(session))
-                .andExpect(redirectedUrl("/cabinet"));
         // Вошедшему через Telegram привязывать нечего — блок показывает это
-        mvc.perform(get("/cabinet").session(session))
+        mvc.perform(get("/cabinet").session(session(entered)))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Открыть бота")))
                 .andExpect(content().string(
                         org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Подключить Telegram"))));
     }
 
-    /** Без начатого входа страница ожидания смысла не имеет. */
+    /* ───────── пароль: смена и восстановление ───────── */
+
+    /**
+     * Восстановление пароля вместо письма.
+     *
+     * <p>Почтовой службы у нас нет, ссылку «я забыл пароль» слать нечем.
+     * Вместо неё работает вторая дверь: вошедший по ссылке из бота доказал,
+     * что аккаунт его, — и задаёт новый пароль, не вспоминая старого.</p>
+     */
     @Test
-    void botLoginWaitWithoutCodeGoesBackToLogin() throws Exception {
-        mvc.perform(get("/auth/bot/wait"))
+    void secondDoorResetsAForgottenPassword() throws Exception {
+        AccountService.Account account = accounts.register(EMAIL, PASSWORD, "Аня");
+        accounts.linkIdentity(account.id(), Bot.account.IdentityProvider.TELEGRAM, "4242");
+
+        String token = tokenOf(botLogins.issue(4242L, "Аня").orElseThrow());
+        MvcResult entered = mvc.perform(post("/auth/enter").param("token", token).with(csrf()))
+                .andExpect(redirectedUrl("/cabinet"))
+                .andReturn();
+
+        mvc.perform(post("/cabinet/password").session(session(entered)).with(csrf())
+                        .param("newPassword", "бумажный кораблик у моста"))
+                .andExpect(redirectedUrl("/cabinet"));
+
+        assertThat(accounts.authenticate(EMAIL, "бумажный кораблик у моста")).isPresent();
+        assertThat(accounts.authenticate(EMAIL, PASSWORD)).isEmpty();
+    }
+
+    /** А вошедшему паролем старый нужен: иначе чужая вкладка сменит его молча. */
+    @Test
+    void passwordDoorMustRepeatTheOldPassword() throws Exception {
+        accounts.register(EMAIL, PASSWORD, "Аня");
+
+        MvcResult login = mvc.perform(post("/login").with(csrf())
+                        .param("email", EMAIL)
+                        .param("password", PASSWORD))
+                .andExpect(redirectedUrl("/cabinet"))
+                .andReturn();
+
+        mvc.perform(post("/cabinet/password").session(session(login)).with(csrf())
+                        .param("currentPassword", "не-тот-пароль")
+                        .param("newPassword", "бумажный кораблик у моста"))
+                .andExpect(redirectedUrl("/cabinet"));
+
+        assertThat(accounts.authenticate(EMAIL, PASSWORD)).isPresent();
+        assertThat(accounts.authenticate(EMAIL, "бумажный кораблик у моста")).isEmpty();
+    }
+
+    /** Смена пароля — не публичная дверь. */
+    @Test
+    void strangerCannotChangeAnyonesPassword() throws Exception {
+        mvc.perform(post("/cabinet/password").with(csrf())
+                        .param("newPassword", "бумажный кораблик у моста"))
+                .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login"));
+    }
+
+    /**
+     * Открытие ссылки её не гасит.
+     *
+     * <p>По адресам ходят не только люди: Telegram тянет предпросмотр,
+     * антивирусы открывают их сами. Гашение на GET сожгло бы вход до того, как
+     * человек его увидит.</p>
+     */
+    @Test
+    void openingTheLinkDoesNotBurnIt() throws Exception {
+        String token = tokenOf(botLogins.issue(4242L, "Аня").orElseThrow());
+
+        mvc.perform(get("/auth/enter/" + token)).andExpect(status().isOk());
+        mvc.perform(get("/auth/enter/" + token)).andExpect(status().isOk());
+        mvc.perform(post("/auth/enter").param("token", token).with(csrf()))
+                .andExpect(redirectedUrl("/cabinet"));
+    }
+
+    /** Второй раз по той же ссылке не входят — и страница говорит об этом. */
+    @Test
+    void botLinkWorksExactlyOnce() throws Exception {
+        String token = tokenOf(botLogins.issue(4242L, "Аня").orElseThrow());
+        mvc.perform(post("/auth/enter").param("token", token).with(csrf()))
+                .andExpect(redirectedUrl("/cabinet"));
+
+        mvc.perform(post("/auth/enter").param("token", token).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("устарела")));
+    }
+
+    /** Выдуманный токен ничем не отличается от протухшего. */
+    @Test
+    void unknownTokenGoesBackToLogin() throws Exception {
+        mvc.perform(get("/auth/enter/нет-такого"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("устарела")));
+    }
+
+    /**
+     * Кабинет принимает записи, а не что попало.
+     *
+     * <p>В чате документы фильтровались по расширению, а здесь не фильтровались
+     * вовсе: на диск домашней машины ложился любой файл до 2,5 ГБ, и задача
+     * уходила в очередь, чтобы упасть на ffmpeg через полчаса.</p>
+     */
+    @Test
+    void cabinetRefusesFilesThatAreNotRecordings() throws Exception {
+        var session = session(mvc.perform(post("/auth/enter")
+                        .param("token", tokenOf(botLogins.issue(4242L, "Аня").orElseThrow()))
+                        .with(csrf()))
+                .andExpect(redirectedUrl("/cabinet"))
+                .andReturn());
+
+        var file = new org.springframework.mock.web.MockMultipartFile(
+                "file", "заметки.txt", "text/plain",
+                "это не запись".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/cabinet/upload").file(file).session(session).with(csrf()))
+                .andExpect(redirectedUrl("/cabinet"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .flash().attribute("error",
+                                org.hamcrest.Matchers.containsString("расшифровать")));
+    }
+
+    /**
+     * Политика содержимого: строгая на страницах и особая у формы загрузки.
+     *
+     * <p>Проверяется ровно то, что ломается молча: включить общую строгую
+     * политику всем — значит выключить форму загрузки, у которой стили и скрипт
+     * лежат внутри самого файла.</p>
+     */
+    @Test
+    void pagesAndTheUploadFormGetDifferentPolicies() throws Exception {
+        mvc.perform(get("/login"))
+                .andExpect(header().string("Content-Security-Policy",
+                        org.hamcrest.Matchers.containsString("script-src 'self' https://telegram.org")))
+                .andExpect(header().string("Content-Security-Policy",
+                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("unsafe-inline"))));
+
+        // Токена нет, форма отвечает «уже нельзя» — заголовок при этом тот же
+        mvc.perform(get("/upload/НЕТТАКОГО"))
+                .andExpect(header().string("Content-Security-Policy",
+                        org.hamcrest.Matchers.containsString("script-src 'self' 'unsafe-inline'")));
+    }
+
+    private static String tokenOf(String link) {
+        return link.substring(link.lastIndexOf('/') + 1);
     }
 
     @Test

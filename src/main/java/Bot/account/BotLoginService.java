@@ -1,17 +1,24 @@
 package Bot.account;
 
 /**
- * Вход на сайт через бота — без номера телефона.
+ * Вход на сайт через бота — без номера телефона и без пароля.
  *
- * <p>Ответственность: выдать одноразовый код, принять подтверждение из чата и
- * отдать странице аккаунт, когда подтверждение пришло. Три шага разнесены во
- * времени и приходят с разных сторон: код рождается в браузере, подтверждение —
- * в Telegram, а вход снова происходит в браузере.</p>
+ * <p>Ответственность: выдать чату одноразовую ссылку на сайт и пустить по ней
+ * в аккаунт этого чата. Два шага, а не три: ссылка рождается в Telegram и там
+ * же вручается, браузеру остаётся только её открыть.</p>
  *
- * <p>Почему не хватает самого {@code /start} со ссылки: ссылку можно прислать
- * постороннему, и нажатие «Запустить» пустило бы отправителя в чужой аккаунт.
- * Поэтому {@link #confirm} вызывается только после явного нажатия кнопки, где
- * назван домен, — а до тех пор код остаётся неподтверждённым.</p>
+ * <p><b>Почему направление именно такое.</b> Раньше вход начинала страница:
+ * она заводила код, человек шёл с ним в бота и подтверждал вход, выбирая одно
+ * из трёх чисел. Слабое место было не в числе, а в том, что начать вход мог
+ * кто угодно, а подтверждать шли к чужому человеку — достаточно было прислать
+ * ему ссылку под благовидным предлогом. Один к трём — не та вероятность,
+ * которой стоит защищать чужую переписку.</p>
+ *
+ * <p>Теперь ссылку выдаёт бот тому, кто её попросил. Токен рождается из чата
+ * человека и приходит только в этот чат, поэтому постороннему прислать нечего:
+ * ссылки на чужой аккаунт не существует. Остаётся один случай — человек сам
+ * перешлёт кому-то свою ссылку; на него работают короткий срок жизни,
+ * одноразовость и сообщение в чат сразу после входа.</p>
  *
  * <p>Аккаунт ищется по тому же идентификатору Telegram, что и вход виджетом,
  * так что оба способа ведут в одну и ту же учётную запись.</p>
@@ -19,6 +26,7 @@ package Bot.account;
 import Bot.config.Profiles;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -27,11 +35,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
 import java.util.Base64;
 import java.util.Optional;
 
@@ -42,175 +45,132 @@ import java.util.Optional;
 public class BotLoginService {
 
     /**
-     * Столько ждём подтверждения. Пять минут — это «переключился в Telegram и
-     * нажал кнопку»; всё, что дольше, человек уже бросил, а код всё это время
-     * лежит в открытой вкладке и в истории браузера.
+     * Столько живёт ссылка. Три минуты — это «переключился в браузер и нажал»;
+     * всё, что дольше, лежит в переписке и ждёт случая.
      */
-    private static final Duration TTL = Duration.ofMinutes(5);
+    private static final Duration TTL = Duration.ofMinutes(3);
 
-    /** 16 байт — подобрать перебором за пять минут невозможно. */
-    private static final int CODE_BYTES = 16;
+    /** 32 байта: подобрать перебором невозможно даже без ограничителя. */
+    private static final int TOKEN_BYTES = 32;
+
+    /**
+     * Сколько ссылок один чат может попросить за окно.
+     *
+     * <p>Каждая — запись в базу и сообщение в чат. Живому человеку хватает
+     * одной, второй-третьей он пользуется, когда первая протухла; всё, что
+     * сверх, — это либо ошибка клиента, либо чужие руки.</p>
+     */
+    private static final int MAX_PER_WINDOW = 5;
+    private static final Duration WINDOW = Duration.ofMinutes(10);
 
     private static final SecureRandom RANDOM = new SecureRandom();
-    /** Без padding: код едет в адресе ссылки t.me, где разрешены только буквы, цифры, «_» и «-». */
+    /** Без padding: токен едет в пути адреса, где «=» лишний. */
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
 
-    private final BotLoginCodeRepository codes;
+    /** Публичный адрес сайта: из него собирается сама ссылка. */
+    @Value("${site.base-url:http://localhost:8080}")
+    private String baseUrl;
+
+    private final BotLoginLinkRepository links;
     private final AccountService accounts;
 
-    /** Сколько чисел показывает бот и в каких пределах они лежат. */
-    private static final int CHOICES = 3;
-    private static final int NUMBER_MIN = 10;
-    private static final int NUMBER_BOUND = 90;   // 10..99
-
-    /** Заводит код и число сверки и возвращает их странице ожидания. */
+    /**
+     * Заводит ссылку входа для этого чата.
+     *
+     * <p>Пусто — чат просит их слишком часто; для бота это «попробуйте позже»,
+     * и различать причины ему незачем.</p>
+     */
     @Transactional
-    public Issued issue() {
-        byte[] bytes = new byte[CODE_BYTES];
+    public Optional<String> issue(long chatId, String displayName) {
+        if (links.countByChatIdAndCreatedAtGreaterThanEqual(chatId, Instant.now().minus(WINDOW))
+                >= MAX_PER_WINDOW) {
+            log.warn("Слишком частые запросы ссылки входа: chatId={}", chatId);
+            return Optional.empty();
+        }
+
+        byte[] bytes = new byte[TOKEN_BYTES];
         RANDOM.nextBytes(bytes);
 
-        BotLoginCodeEntity entity = new BotLoginCodeEntity();
-        entity.setCode(ENCODER.encodeToString(bytes));
-        entity.setCreatedAt(Instant.now());
-        entity.setExpiresAt(Instant.now().plus(TTL));
-        entity.setCheckNumber(NUMBER_MIN + RANDOM.nextInt(NUMBER_BOUND));
-        codes.save(entity);
-
-        log.info("Выдан код входа через бота");
-        return new Issued(entity.getCode(), entity.getCheckNumber());
-    }
-
-    /**
-     * Числа для кнопок в боте: настоящее и два посторонних, в случайном порядке.
-     *
-     * <p>Считает их дом, а не бот: бот не должен знать, какое из трёх верное —
-     * он только показывает их и передаёт обратно выбранное.</p>
-     *
-     * <p>Пустой список — код неизвестен, просрочен или уже сработал. Для бота
-     * это один и тот же ответ, чтобы по разнице нельзя было проверять коды.</p>
-     */
-    @Transactional(readOnly = true)
-    public List<Integer> challengeFor(String code) {
-        Optional<BotLoginCodeEntity> found = codes.findById(code == null ? "" : code.trim());
-        if (found.isEmpty()) {
-            return List.of();
-        }
-        BotLoginCodeEntity entity = found.get();
-        if (entity.getUsedAt() != null || entity.getExpiresAt().isBefore(Instant.now())
-                || entity.getCheckNumber() == null) {
-            return List.of();
-        }
-
-        Set<Integer> numbers = new LinkedHashSet<>();
-        numbers.add(entity.getCheckNumber());
-        while (numbers.size() < CHOICES) {
-            numbers.add(NUMBER_MIN + RANDOM.nextInt(NUMBER_BOUND));
-        }
-
-        List<Integer> shuffled = new ArrayList<>(numbers);
-        Collections.shuffle(shuffled, RANDOM);
-        return shuffled;
-    }
-
-    /** Код и число, которое страница покажет человеку. */
-    public record Issued(String code, int checkNumber) {}
-
-    /**
-     * Подтверждение из чата: этот человек действительно входит на сайт.
-     *
-     * @return {@code false}, если код неизвестен, просрочен или уже сработал —
-     *         для бота это один и тот же ответ «код не подошёл»
-     */
-    @Transactional
-    public Confirmation confirm(long chatId, String code, String displayName, int chosenNumber) {
-        Optional<BotLoginCodeEntity> found = codes.findById(code == null ? "" : code.trim());
-        if (found.isEmpty()) {
-            log.info("Подтверждение входа с неизвестным кодом: chatId={}", chatId);
-            return Confirmation.STALE;
-        }
-
-        BotLoginCodeEntity entity = found.get();
-        if (entity.getUsedAt() != null || entity.getExpiresAt().isBefore(Instant.now())) {
-            log.info("Подтверждение входа по просроченному коду: chatId={}", chatId);
-            return Confirmation.STALE;
-        }
-
-        // Не то число — код гасится немедленно. Ошибиться может и свой, но
-        // куда вероятнее, что человеку прислали чужую ссылку и сверять ему не
-        // с чем: дать вторую попытку значило бы дать её именно этому случаю
-        if (entity.getCheckNumber() != null && entity.getCheckNumber() != chosenNumber) {
-            entity.setUsedAt(Instant.now());
-            log.warn("Вход через бота отклонён: число не совпало, код погашен (chatId={})", chatId);
-            return Confirmation.WRONG_NUMBER;
-        }
-
+        BotLoginLinkEntity entity = new BotLoginLinkEntity();
+        entity.setToken(ENCODER.encodeToString(bytes));
         entity.setChatId(chatId);
         entity.setDisplayName(displayName);
-        entity.setConfirmedAt(Instant.now());
-        log.info("Вход через бота подтверждён: chatId={}", chatId);
-        return Confirmation.CONFIRMED;
-    }
+        entity.setCreatedAt(Instant.now());
+        entity.setExpiresAt(Instant.now().plus(TTL));
+        links.save(entity);
 
-    /** Чем кончилось подтверждение — у каждого исхода свой текст в чате. */
-    public enum Confirmation { CONFIRMED, WRONG_NUMBER, STALE }
-
-    /** Что сейчас с кодом — на это смотрит страница ожидания. */
-    @Transactional(readOnly = true)
-    public State stateOf(String code) {
-        Optional<BotLoginCodeEntity> found = codes.findById(code == null ? "" : code);
-        if (found.isEmpty() || found.get().getUsedAt() != null) {
-            return State.UNKNOWN;
-        }
-        BotLoginCodeEntity entity = found.get();
-        if (entity.getConfirmedAt() != null) {
-            return State.CONFIRMED;
-        }
-        return entity.getExpiresAt().isBefore(Instant.now()) ? State.EXPIRED : State.WAITING;
+        log.info("Выдана ссылка входа на сайт: chatId={}", chatId);
+        return Optional.of(site() + "/auth/enter/" + entity.getToken());
     }
 
     /**
-     * Гасит подтверждённый код и отдаёт аккаунт, под которым входить.
+     * Кого пустит эта ссылка — для страницы подтверждения.
      *
-     * <p>Пусто — значит подтверждения ещё нет, оно устарело или код уже
-     * сработал. Второй раз по тому же коду войти нельзя: он гасится здесь же,
-     * в той же транзакции, что и поиск аккаунта.</p>
+     * <p>Ничего не гасит намеренно: по ссылке ходят не только люди. Telegram
+     * тянет предпросмотр, антивирусы и почтовые фильтры открывают адреса сами,
+     * и гашение на GET сожгло бы вход до того, как человек его увидит.</p>
+     */
+    @Transactional(readOnly = true)
+    public Optional<String> nameOf(String token) {
+        return live(token).map(entity -> entity.getDisplayName() == null
+                ? "" : entity.getDisplayName());
+    }
+
+    /**
+     * Гасит ссылку и отдаёт аккаунт, под которым входить.
+     *
+     * <p>Пусто — ссылка неизвестна, просрочена или уже сработала. Строка берётся
+     * под блокировку и гасится в той же транзакции, что и поиск аккаунта: двух
+     * входов по одной ссылке не должно быть даже при двух одновременных
+     * нажатиях — а именно на это и рассчитывает тот, кому ссылку переслали.</p>
      */
     @Transactional
-    public Optional<AccountService.Account> claim(String code) {
-        Optional<BotLoginCodeEntity> found = codes.findById(code == null ? "" : code);
+    public Optional<Entry> claim(String token) {
+        // Строка берётся под блокировку: два одновременных нажатия иначе
+        // прочитали бы «не погашено» оба и вошли оба
+        Optional<BotLoginLinkEntity> found = links.lockByToken(token == null ? "" : token.trim())
+                .filter(entity -> entity.getUsedAt() == null)
+                .filter(entity -> entity.getExpiresAt().isAfter(Instant.now()));
         if (found.isEmpty()) {
             return Optional.empty();
         }
 
-        BotLoginCodeEntity entity = found.get();
-        if (entity.getConfirmedAt() == null || entity.getUsedAt() != null
-                || entity.getExpiresAt().isBefore(Instant.now())) {
-            return Optional.empty();
-        }
-
+        BotLoginLinkEntity entity = found.get();
         entity.setUsedAt(Instant.now());
-        return Optional.of(accounts.forTelegramChat(entity.getChatId(), entity.getDisplayName()));
+        log.info("Вход по ссылке из бота: chatId={}", entity.getChatId());
+        return Optional.of(new Entry(
+                accounts.forTelegramChat(entity.getChatId(), entity.getDisplayName()),
+                entity.getChatId()));
     }
 
-    /** Просроченные коды копятся зря: чистим раз в час. */
+    /** Кто вошёл и в какой чат сообщить об этом. */
+    public record Entry(AccountService.Account account, long chatId) {}
+
+    /** Просроченные ссылки копятся зря: чистим раз в час. */
     @Scheduled(fixedRate = 60 * 60 * 1000)
     @Transactional
     public void purgeExpired() {
-        int removed = codes.deleteExpired(Instant.now().minus(TTL));
+        int removed = links.deleteExpired(Instant.now().minus(TTL));
         if (removed > 0) {
-            log.debug("Убрано просроченных кодов входа: {}", removed);
+            log.debug("Убрано просроченных ссылок входа: {}", removed);
         }
     }
 
-    /** Состояние кода глазами страницы ожидания. */
-    public enum State {
-        /** Ждём, пока человек нажмёт кнопку в боте. */
-        WAITING,
-        /** Подтверждено — можно входить. */
-        CONFIRMED,
-        /** Время вышло: нужен новый код. */
-        EXPIRED,
-        /** Кода нет вовсе или он уже сработал. */
-        UNKNOWN
+    /* ───────── helpers ───────── */
+
+    /** Ссылка, по которой ещё можно войти: не погашена и не протухла. */
+    private Optional<BotLoginLinkEntity> live(String token) {
+        return links.findById(token == null ? "" : token.trim())
+                .filter(entity -> entity.getUsedAt() == null)
+                .filter(entity -> entity.getExpiresAt().isAfter(Instant.now()));
+    }
+
+    /** Хвостовой слэш дал бы адрес с двойным — часть прокси такое не маршрутизирует. */
+    private String site() {
+        String value = baseUrl == null ? "" : baseUrl.trim();
+        while (value.endsWith("/")) {
+            value = value.substring(0, value.length() - 1);
+        }
+        return value;
     }
 }

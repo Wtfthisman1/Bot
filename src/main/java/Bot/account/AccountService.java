@@ -43,9 +43,6 @@ import java.util.UUID;
 @Slf4j
 public class AccountService {
 
-    /** Короче этого пароль не принимаем: подбор перебором становится реальным. */
-    static final int MIN_PASSWORD_LENGTH = 8;
-
     /** Код привязки живёт минуты: его успевают переслать боту, но не подсмотреть. */
     private static final Duration LINK_CODE_TTL = Duration.ofMinutes(15);
 
@@ -86,7 +83,7 @@ public class AccountService {
      * Заводит аккаунт.
      *
      * @throws EmailTakenException если почта уже занята
-     * @throws IllegalArgumentException если пароль слишком короткий
+     * @throws IllegalArgumentException если пароль не проходит {@link PasswordPolicy}
      */
     @Transactional
     public Account register(String email, String rawPassword, String displayName) {
@@ -97,17 +94,23 @@ public class AccountService {
         if (!EMAIL.matcher(normalized).matches()) {
             throw new IllegalArgumentException("Это не похоже на адрес почты");
         }
-        if (rawPassword == null || rawPassword.length() < MIN_PASSWORD_LENGTH) {
-            throw new IllegalArgumentException(
-                    "Пароль должен быть не короче " + MIN_PASSWORD_LENGTH + " символов");
-        }
+        // Длина — не единственное требование: восьми знаков хватало и для
+        // «12345678», а с него любой перебор и начинается (см. PasswordPolicy)
+        PasswordPolicy.check(rawPassword, normalized);
+
+        // Хеш считается до проверки занятости, а не после. Порядок здесь —
+        // не вкусовщина: bcrypt занимает сотню миллисекунд, и пока он шёл
+        // только для свободного адреса, занятый отвечал заметно быстрее.
+        // Текст ответа при этом ничего не скрывал, но и время отвечало само
+        String hash = passwordEncoder.encode(rawPassword);
+
         if (repository.existsByEmail(normalized)) {
             throw new EmailTakenException(normalized);
         }
 
         AccountEntity entity = newAccount(displayName);
         entity.setEmail(normalized);
-        entity.setPasswordHash(passwordEncoder.encode(rawPassword));
+        entity.setPasswordHash(hash);
         repository.save(entity);
 
         log.info("Зарегистрирован аккаунт: {}", normalized);
@@ -147,6 +150,59 @@ public class AccountService {
         AccountEntity entity = found.get();
         entity.setLastLoginAt(Instant.now());
         return Optional.of(toAccount(entity));
+    }
+
+    /**
+     * Смена пароля из кабинета — она же единственный способ его восстановить.
+     *
+     * <p>Сброса по письму нет и не будет, пока нет почтовой службы. Вместо него
+     * работает вторая дверь: человек входит через бота, Telegram или Google —
+     * то есть доказывает, что аккаунт его, — и задаёт новый пароль, не зная
+     * старого. Кто вошёл паролем, обязан его повторить: иначе открытая чужая
+     * вкладка меняла бы пароль молча.</p>
+     *
+     * <p>Аккаунту без почты пароль не нужен: войти по нему всё равно некуда —
+     * вход по паролю ищет человека по адресу.</p>
+     *
+     * @param mustKnowCurrent вошли паролем — значит, старый надо повторить
+     * @throws IllegalArgumentException с готовым текстом для страницы
+     */
+    @Transactional
+    public void changePassword(UUID accountId, String currentPassword, String newPassword,
+                               boolean mustKnowCurrent) {
+        AccountEntity entity = repository.findById(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("Аккаунт не найден"));
+
+        if (entity.getEmail() == null || entity.getEmail().isBlank()) {
+            throw new IllegalArgumentException(
+                    "Пароль работает только вместе с почтой, а её у аккаунта нет. "
+                            + "Вход через Telegram и Google пароля не требует.");
+        }
+
+        boolean hasPassword = entity.getPasswordHash() != null;
+        if (hasPassword && mustKnowCurrent
+                && !passwordEncoder.matches(
+                        currentPassword == null ? "" : currentPassword,
+                        entity.getPasswordHash())) {
+            throw new IllegalArgumentException("Текущий пароль не подошёл.");
+        }
+
+        PasswordPolicy.check(newPassword, entity.getEmail());
+
+        if (hasPassword && passwordEncoder.matches(newPassword, entity.getPasswordHash())) {
+            throw new IllegalArgumentException("Новый пароль совпадает со старым.");
+        }
+
+        entity.setPasswordHash(passwordEncoder.encode(newPassword));
+        log.info("Пароль изменён: аккаунт={}, старый требовался={}", accountId, mustKnowCurrent);
+    }
+
+    /** Есть ли у аккаунта пароль вообще — кабинету, чтобы спросить о нужном. */
+    @Transactional(readOnly = true)
+    public boolean hasPassword(UUID accountId) {
+        return repository.findById(accountId)
+                .map(entity -> entity.getPasswordHash() != null)
+                .orElse(false);
     }
 
     @Transactional(readOnly = true)
@@ -323,6 +379,31 @@ public class AccountService {
                 .findByProviderAndProviderUserId(IdentityProvider.TELEGRAM, owner.id())
                 .map(identity -> ownersOf(identity.getAccountId()))
                 .orElseGet(() -> List.of(owner));
+    }
+
+    /**
+     * Занимает аккаунт человека до конца текущей транзакции.
+     *
+     * <p>Зачем: проверка «сколько уже поставлено» и сама постановка задачи
+     * должны быть одним действием. Без замка два одновременных запроса читали
+     * одно и то же «использовано 2 из 3» и оба проходили — лимит обходился
+     * простым двойным нажатием. Замок берётся на строку аккаунта, поэтому
+     * ждут друг друга только запросы одного человека.</p>
+     *
+     * <p>Чат, у которого аккаунта ещё нет, заводит его здесь же: иначе
+     * переписка обходила бы очередь просто потому, что пришла раньше сайта.
+     * Вызывать имеет смысл только внутри транзакции — своей замок не
+     * переживёт.</p>
+     *
+     * @return аккаунт, на который записан этот владелец
+     */
+    @Transactional
+    public UUID lockForAdmission(Owner owner) {
+        UUID accountId = owner.isTelegram()
+                ? forTelegramChat(owner.telegramChatId(), null).id()
+                : UUID.fromString(owner.id());
+        repository.lockById(accountId);
+        return accountId;
     }
 
     /** Какими способами в этот аккаунт можно войти — для страницы профиля. */

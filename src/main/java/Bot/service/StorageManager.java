@@ -38,6 +38,17 @@ public class StorageManager {
     private String storageBase;
     private Path storageRoot;
 
+    /**
+     * Сколько байт разрешено занимать одному владельцу.
+     *
+     * <p>Квота считает расшифровки, а не гигабайты: три задачи в месяц — это
+     * три файла, но каждый может быть на 2,5 ГБ, а форма принимает пять разом.
+     * Плюс скачанные ролики, которые лимита не тратят вовсе. Без потолка любой
+     * вошедший забивал диск домашней машины, ничего при этом не нарушая.</p>
+     */
+    @Value("${storage.max-bytes-per-owner:10737418240}")
+    private long maxBytesPerOwner;
+
     private static final DateTimeFormatter DTF =
             DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS");
 
@@ -70,6 +81,67 @@ public class StorageManager {
         String title = videoTitle(url);
         return ensureSubDir(owner, "downloaded")
                 .resolve(fileName(title, extension));
+    }
+
+    /**
+     * Влезет ли ещё столько байт в каталог владельца.
+     *
+     * <p>Считаются только записи — {@code uploaded} и {@code downloaded};
+     * расшифровки это текст, они не весят ничего и живут дольше файлов.</p>
+     */
+    public boolean hasRoomFor(Owner owner, long bytes) throws IOException {
+        if (maxBytesPerOwner <= 0) {
+            return true;
+        }
+        long used = usedBytes(owner);
+        if (used + Math.max(0, bytes) <= maxBytesPerOwner) {
+            return true;
+        }
+        log.info("Владелец {} упёрся в потолок хранилища: занято {} МБ из {} МБ",
+                owner, used / 1048576, maxBytesPerOwner / 1048576);
+        return false;
+    }
+
+    /**
+     * Есть ли у владельца место вообще — когда размер будущего файла неизвестен.
+     *
+     * <p>Так спрашивает скачивание: сколько весит ролик, выяснится уже внутри
+     * yt-dlp. Ошибку чтения каталога считаем «место есть»: не сумев посчитать
+     * занятое, останавливать работу всем — плохой обмен.</p>
+     */
+    public boolean hasRoom(Owner owner) {
+        try {
+            return hasRoomFor(owner, 0);
+        } catch (IOException e) {
+            log.warn("Не удалось посчитать занятое место владельца {}", owner, e);
+            return true;
+        }
+    }
+
+    /** Сколько уже занято записями этого владельца. */
+    public long usedBytes(Owner owner) throws IOException {
+        long total = 0;
+        for (String dirName : new String[]{"uploaded", "downloaded"}) {
+            Path dir = userRoot(owner).resolve(dirName);
+            if (!Files.isDirectory(dir)) {
+                continue;
+            }
+            try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+                total += files.filter(Files::isRegularFile).mapToLong(file -> {
+                    try {
+                        return Files.size(file);
+                    } catch (IOException e) {
+                        return 0;
+                    }
+                }).sum();
+            }
+        }
+        return total;
+    }
+
+    /** Сколько всего можно занять — для текста отказа. */
+    public long maxBytesPerOwner() {
+        return maxBytesPerOwner;
     }
 
     public Path transcriptPath(Owner owner, String baseName) throws IOException {

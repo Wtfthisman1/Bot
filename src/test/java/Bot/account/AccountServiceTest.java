@@ -92,6 +92,69 @@ class AccountServiceTest {
         assertThat(repository.findByEmail(EMAIL).orElseThrow().getLastLoginAt()).isNotNull();
     }
 
+    /** «12345678» — это восемь символов и первая строка любого перебора. */
+    @Test
+    void wellKnownPasswordIsRefused() {
+        assertThatThrownBy(() -> accounts.register(EMAIL, "12345678", "Аня"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> accounts.register(EMAIL, "QWERTY123", "Аня"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(repository.count()).isZero();
+    }
+
+    /* ───────── смена пароля: она же восстановление ───────── */
+
+    /**
+     * Вошедший второй дверью задаёт пароль, не зная старого.
+     *
+     * <p>Это и есть всё восстановление пароля, какое у нас может быть: письма
+     * слать нечем, а Telegram и Google подтверждают человека не хуже.</p>
+     */
+    @Test
+    void secondDoorLetsTheForgottenPasswordBeReplaced() {
+        AccountService.Account account = accounts.register(EMAIL, PASSWORD, "Аня");
+
+        accounts.changePassword(account.id(), null, "новая-длинная-фраза", false);
+
+        assertThat(accounts.authenticate(EMAIL, "новая-длинная-фраза")).isPresent();
+        assertThat(accounts.authenticate(EMAIL, PASSWORD)).isEmpty();
+    }
+
+    /** А вошедший паролем обязан его повторить: иначе чужая вкладка сменит его молча. */
+    @Test
+    void passwordDoorMustRepeatTheOldPassword() {
+        AccountService.Account account = accounts.register(EMAIL, PASSWORD, "Аня");
+
+        assertThatThrownBy(() ->
+                accounts.changePassword(account.id(), "не-тот", "новая-длинная-фраза", true))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(accounts.authenticate(EMAIL, PASSWORD)).isPresent();
+
+        accounts.changePassword(account.id(), PASSWORD, "новая-длинная-фраза", true);
+        assertThat(accounts.authenticate(EMAIL, "новая-длинная-фраза")).isPresent();
+    }
+
+    /** Новый пароль проверяется теми же правилами, что и при регистрации. */
+    @Test
+    void newPasswordGoesThroughTheSameRules() {
+        AccountService.Account account = accounts.register(EMAIL, PASSWORD, "Аня");
+
+        assertThatThrownBy(() -> accounts.changePassword(account.id(), PASSWORD, "qwerty123", true))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(accounts.authenticate(EMAIL, PASSWORD)).isPresent();
+    }
+
+    /** Аккаунту без почты пароль некуда прикладывать: вход по нему ищет адрес. */
+    @Test
+    void accountWithoutEmailGetsNoPassword() {
+        AccountService.Account account = accounts.findOrCreateByIdentity(
+                IdentityProvider.TELEGRAM, "770077", "Аня", null);
+
+        assertThatThrownBy(() ->
+                accounts.changePassword(account.id(), null, "длинная-новая-фраза", false))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     /** Задачи такого владельца лягут в ту же очередь, что и телеграмные. */
     @Test
     void accountBecomesAJobOwner() {

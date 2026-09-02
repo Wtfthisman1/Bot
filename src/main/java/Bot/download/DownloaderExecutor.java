@@ -76,6 +76,13 @@ public class DownloaderExecutor {
         if (url.isBlank())
             throw new IllegalArgumentException("URL is blank");
 
+        // Второй раз, уже перед самим скачиванием: между постановкой задачи и
+        // её очередью проходят часы, и за это время место могло кончиться —
+        // в том числе из-за соседних задач того же владельца
+        if (!storageManager.hasRoom(owner)) {
+            throw new IOException("Кончилось место, отведённое под записи этого владельца");
+        }
+
         /* 1. путь назначения */
         Path dst = storageManager.downloadedPath(owner, url, media.extension());
         Files.createDirectories(dst.getParent());

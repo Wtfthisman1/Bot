@@ -15,6 +15,16 @@ package Bot.site;
  * <p>Срок годности проверяется отдельно: подпись остаётся верной вечно, и без
  * ограничения по времени однажды перехваченная ссылка пускала бы в аккаунт
  * когда угодно.</p>
+ *
+ * <p><b>Почему пять минут, а не сутки.</b> Виджет возвращает подпись в строке
+ * запроса: {@code /auth/telegram?id=…&hash=…}. Такой адрес целиком оседает в
+ * истории браузера и в журнале доступа nginx — то есть суточная подпись была
+ * готовым пропуском в аккаунт для всякого, кто до этого журнала доберётся.
+ * Пять минут — это «нажал кнопку и вернулся», больше живому входу не нужно.</p>
+ *
+ * <p>И тем же ответом закрыт повтор: подпись, по которой уже входили,
+ * запоминается до конца своего срока. Иначе одну и ту же ссылку можно было бы
+ * открыть дважды — из истории браузера на чужом компьютере, например.</p>
  */
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,13 +40,22 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 @Slf4j
 public class TelegramLoginVerifier {
 
-    /** Столько живёт подпись виджета. День — с запасом на «открыл и отвлёкся». */
-    private static final Duration MAX_AGE = Duration.ofDays(1);
+    /** Столько живёт подпись виджета: ровно на «нажал кнопку и вернулся». */
+    private static final Duration MAX_AGE = Duration.ofMinutes(5);
+
+    /**
+     * Подписи, по которым уже входили, — до конца их срока.
+     *
+     * <p>В памяти, а не в базе: живут они пять минут, а перезапуск и так рвёт
+     * все сессии сайта — терять тут нечего.</p>
+     */
+    private final Map<String, Instant> used = new ConcurrentHashMap<>();
 
     private final byte[] secretKey;
 
@@ -87,6 +106,14 @@ public class TelegramLoginVerifier {
         }
         if (signedAt.isBefore(Instant.now().minus(MAX_AGE))) {
             log.warn("Вход через Telegram отклонён: данные устарели");
+            return Optional.empty();
+        }
+
+        // Заодно выкидываем всё, что уже не могло бы пройти проверку выше
+        Instant edge = Instant.now().minus(MAX_AGE);
+        used.values().removeIf(when -> when.isBefore(edge));
+        if (used.putIfAbsent(hash.toLowerCase(), Instant.now()) != null) {
+            log.warn("Вход через Telegram отклонён: подпись уже была использована");
             return Optional.empty();
         }
 

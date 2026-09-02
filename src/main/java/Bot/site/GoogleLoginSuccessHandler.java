@@ -46,7 +46,7 @@ public class GoogleLoginSuccessHandler implements AuthenticationSuccessHandler {
         AccountService.Account account = accounts.findOrCreateByIdentity(
                 IdentityProvider.GOOGLE, subject, name, email);
 
-        sessionLogin.signIn(request, response, account);
+        sessionLogin.signIn(request, response, account, SessionLogin.Door.GOOGLE);
         response.sendRedirect("/cabinet");
     }
 }

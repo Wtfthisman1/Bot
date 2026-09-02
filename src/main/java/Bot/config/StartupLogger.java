@@ -45,6 +45,12 @@ public class StartupLogger {
     @Value("${worker.pool-size:2}")
     private int poolSize;
 
+    /** На каком адресе слушаем. Пусто — на всех интерфейсах сразу. */
+    @Value("${server.address:}")
+    private String serverAddress;
+
+    private final org.springframework.core.env.Environment environment;
+
     @EventListener(ApplicationReadyEvent.class)
     public void logConfiguration() {
         log.info("Приложение готово: порт={}, воркеров={}", serverPort, poolSize);
@@ -52,6 +58,31 @@ public class StartupLogger {
 
         report("upload.base-url", uploadBaseUrl);
         report("download.base-url", downloadBaseUrl);
+        reportBinding();
+    }
+
+    /**
+     * Дом, открытый всей домашней сети, — это обход всего, что стоит снаружи.
+     *
+     * <p>Наружу сайт смотрит через nginx: там ограничение частоты на дверях
+     * входа, там HTTPS, там же перезаписывается {@code X-Real-IP}, по которому
+     * считаются неудачные попытки. Приложение, слушающее все интерфейсы,
+     * принимает запросы и мимо него — с любого устройства домашней сети, по
+     * открытому http и с каким угодно заголовком адреса. Лечится не файрволом
+     * (он рубит трафик через sing-box), а привязкой к адресу туннеля.</p>
+     */
+    private void reportBinding() {
+        if (!environment.acceptsProfiles(
+                org.springframework.core.env.Profiles.of(Bot.config.Profiles.HOME))) {
+            return;
+        }
+        if (serverAddress == null || serverAddress.isBlank()) {
+            log.warn("Приложение слушает все интерфейсы: сайт и /internal видны любому "
+                    + "устройству домашней сети — мимо nginx, мимо HTTPS и мимо ограничения "
+                    + "попыток входа. Задайте SERVER_ADDRESS (адрес в туннеле, обычно 10.8.0.2)");
+            return;
+        }
+        log.info("Слушаем только {}", serverAddress);
     }
 
     /** Что не так с базовым адресом — решение отделено от логирования ради тестов. */

@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Переводы строк внутри сообщения заменяются на «⏎».
+
+  В журнал попадают имена присланных файлов, ссылки и имена из Telegram — всё
+  это выбирает посторонний. Имя файла вида «отчёт.mp4\n12:00:00 INFO  Bot.site
+  – Вход на сайт: аккаунт=…» дописывало в app.log строку, неотличимую от
+  настоящей: разбор инцидента после такого читает выдумку злоумышленника.
+  Стектрейсы (%ex) это не задевает — они идут отдельным конвертером.
+-->
 <configuration debug="false">
 
     <!-- ───── appenders ───── -->
@@ -11,7 +20,7 @@
             <level>${LOG_LEVEL:-INFO}</level>
         </filter>
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} [chat=%X{chatId:-—} job=%X{jobId:-—}] – %msg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} [chat=%X{chatId:-—} job=%X{jobId:-—}] – %replace(%msg){'[\r\n]+', ' ⏎ '}%n</pattern>
         </encoder>
     </appender>
 
@@ -26,7 +35,7 @@
             <maxHistory>60</maxHistory>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} [chat=%X{chatId:-—} job=%X{jobId:-—}] – %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} [chat=%X{chatId:-—} job=%X{jobId:-—}] – %replace(%msg){'[\r\n]+', ' ⏎ '}%n</pattern>
         </encoder>
     </appender>
 
@@ -47,7 +56,7 @@
                 <file>logs/jobs/job-${jobId}.log</file>
                 <append>true</append>
                 <encoder>
-                    <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{28} – %msg%n</pattern>
+                    <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{28} – %replace(%msg){'[\r\n]+', ' ⏎ '}%n</pattern>
                 </encoder>
             </appender>
         </sift>

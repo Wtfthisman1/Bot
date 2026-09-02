@@ -27,6 +27,7 @@ public final class Keyboards {
     public static final String CB_UPLOAD     = "menu:upload";
     public static final String CB_STATUS     = "menu:status";
     public static final String CB_HELP       = "menu:help";
+    public static final String CB_LOGIN      = "menu:login";
     public static final String CB_CANCEL     = "menu:cancel";
     public static final String CB_DL_AUDIO   = "dl:audio";
     public static final String CB_DL_VIDEO   = "dl:video";
@@ -59,17 +60,6 @@ public final class Keyboards {
      */
     public static final String CB_CANCEL_JOB_PREFIX = "cnl:";
 
-    /**
-     * Подтверждение входа на сайт: {@code login:yes:<код>} и {@code login:no:<код>}.
-     *
-     * <p>Код — 22 символа, вместе с префиксом это 32 байта: лимит Telegram
-     * в 64 байта на всю строку выдержан с запасом.</p>
-     */
-    public static final String CB_LOGIN_PREFIX = "login:";
-
-    /** Подтверждение привязки чата к аккаунту: {@code link:yes:<код>} и {@code link:no:<код>}. */
-    public static final String CB_LINK_PREFIX = "lnk:";
-
     /** Сколько знаков названия влезает в кнопку, не превращая её в простыню. */
     private static final int BUTTON_TITLE_LIMIT = 30;
 
@@ -83,7 +73,11 @@ public final class Keyboards {
                         button("📥 Скачать", CB_DOWNLOAD)),
                 List.of(button("📤 Загрузить файлы", CB_UPLOAD),
                         button("📊 Статус", CB_STATUS)),
-                List.of(button("❓ Помощь", CB_HELP))
+                // Вход на сайт начинается здесь, а не на странице входа: ссылку
+                // выдаёт бот тому, кто её попросил, — прислать её постороннему
+                // нельзя, потому что чужой ссылки не существует
+                List.of(button("🔐 Войти на сайт", CB_LOGIN),
+                        button("❓ Помощь", CB_HELP))
         );
     }
 
@@ -135,37 +129,6 @@ public final class Keyboards {
     /** Строка {@code callback_data} для кнопки формата — собирается только здесь. */
     public static String transcriptCallback(TranscriptFormat format, String id) {
         return CB_TRANSCRIPT_PREFIX + format.code() + ':' + id;
-    }
-
-    /**
-     * Подтвердить или отклонить вход на сайт.
-     *
-     * <p>Две кнопки, а не одна: человек мог открыть чужую ссылку, и «Это не я»
-     * должно быть таким же простым действием, как согласие.</p>
-     */
-    public static InlineKeyboardMarkup loginConfirm(String code, List<Integer> numbers) {
-        // Числа в один ряд, отказ — отдельной строкой ниже: «Это не я» не должно
-        // оказаться под пальцем рядом с тем, что нажимают не глядя
-        List<InlineKeyboardButton> choices = numbers.stream()
-                .map(number -> button(String.valueOf(number), CB_LOGIN_PREFIX + number + ":" + code))
-                .toList();
-        return keyboard(
-                choices,
-                List.of(button("❌ Это не я", CB_LOGIN_PREFIX + "no:" + code))
-        );
-    }
-
-    /**
-     * Привязать этот чат к аккаунту на сайте или отказаться.
-     *
-     * <p>Как и у входа, две кнопки: ссылку с кодом можно прислать чужому
-     * человеку, и тогда его переписка досталась бы отправителю.</p>
-     */
-    public static InlineKeyboardMarkup linkConfirm(String code) {
-        return keyboard(
-                List.of(button("✅ Да, это мой аккаунт", CB_LINK_PREFIX + "yes:" + code)),
-                List.of(button("❌ Нет", CB_LINK_PREFIX + "no:" + code))
-        );
     }
 
     /**

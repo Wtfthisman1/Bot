@@ -17,7 +17,7 @@ class StartupLoggerTest {
 
     @BeforeEach
     void setUp() {
-        logger = new StartupLogger();
+        logger = new StartupLogger(new org.springframework.mock.env.MockEnvironment());
         ReflectionTestUtils.setField(logger, "serverPort", 8080);
     }
 

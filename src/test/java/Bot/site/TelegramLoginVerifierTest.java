@@ -59,6 +59,27 @@ class TelegramLoginVerifierTest {
         assertThat(verifier.verify(signed(Instant.now().minus(Duration.ofDays(2))))).isEmpty();
     }
 
+    /**
+     * Подпись живёт минуты, а не сутки.
+     *
+     * <p>Виджет возвращает её прямо в адресе, и адрес целиком оседает в
+     * истории браузера и в журнале доступа nginx. Суточная подпись была там
+     * готовым пропуском в аккаунт.</p>
+     */
+    @Test
+    void yesterdaysSignatureIsRejected() {
+        assertThat(verifier.verify(signed(Instant.now().minus(Duration.ofHours(1))))).isEmpty();
+    }
+
+    /** По одной подписи входят один раз: повтор из истории браузера не проходит. */
+    @Test
+    void replayIsRejected() {
+        Map<String, String> params = signed(Instant.now());
+
+        assertThat(verifier.verify(params)).isPresent();
+        assertThat(verifier.verify(params)).isEmpty();
+    }
+
     @Test
     void dataWithoutSignatureIsRejected() {
         assertThat(verifier.verify(Map.of("id", "4242"))).isEmpty();

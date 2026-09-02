@@ -10,6 +10,11 @@ package Bot.site;
  *
  * <p>Ошибки входа намеренно безликие: «почта или пароль не подходят». По
  * разнице ответов подбирают список существующих адресов.</p>
+ *
+ * <p>Вход через бота сюда только приходит: ссылку выдаёт сам бот тому, кто её
+ * попросил, а здесь она гасится. Начинать вход со страницы больше нельзя, и
+ * это не упрощение — раньше код заводил браузер, а подтверждать шли в чат, и
+ * ссылку с чужим кодом можно было прислать постороннему.</p>
  */
 import Bot.account.AccountService;
 import Bot.account.BotLoginService;
@@ -27,6 +32,7 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -39,12 +45,6 @@ import java.util.Optional;
 @Slf4j
 public class AuthController {
 
-    /** Ключ в сессии, под которым лежит начатый вход через бота. */
-    private static final String BOT_LOGIN_CODE = "botLoginCode";
-
-    /** Число сверки — рядом с кодом и в той же сессии: его показывает страница. */
-    private static final String BOT_LOGIN_NUMBER = "botLoginNumber";
-
     /** Имя бота без «@» — виджет входа Telegram узнаёт бота по нему. */
     @Value("${bot.name:}")
     private String botName;
@@ -54,6 +54,7 @@ public class AuthController {
     private final BotLoginService botLogins;
     private final SessionLogin sessionLogin;
     private final TelegramLoginVerifier telegramLogin;
+    private final LoginNotice loginNotice;
     private final ObjectProvider<ClientRegistrationRepository> googleClients;
 
     @GetMapping("/")
@@ -96,7 +97,7 @@ public class AuthController {
         }
 
         attempts.succeeded(request);
-        sessionLogin.signIn(request, response, account.get());
+        sessionLogin.signIn(request, response, account.get(), SessionLogin.Door.PASSWORD);
         return "redirect:/cabinet";
     }
 
@@ -119,10 +120,24 @@ public class AuthController {
         if (!attempts.allows(request)) {
             return registrationFailed(model, attempts.refusal());
         }
+        // Отдельный, более строгий счёт. Ответ «на эту почту аккаунт уже
+        // заведён» позволяет перебором узнать, кто здесь зарегистрирован;
+        // убрать сам ответ нечем, пока писем слать нечем, — поэтому перебору
+        // ограничена скорость
+        if (!attempts.allowsRegistration(request)) {
+            return registrationFailed(model, attempts.registrationRefusal());
+        }
+        // Тратится до попытки и при любом исходе: перебор адресов состоит из
+        // неудач, конвейер аккаунтов — из удач, считать надо и то, и другое
+        attempts.spendRegistration(request);
 
         try {
             AccountService.Account account = accounts.register(email, password, displayName);
-            sessionLogin.signIn(request, response, account);
+            // Удачная регистрация тоже тратит попытку: без этого счётчик ловил
+            // только опечатки, а конвейер аккаунтов с одного адреса проходил
+            // мимо него целиком
+            attempts.spend(request);
+            sessionLogin.signIn(request, response, account, SessionLogin.Door.PASSWORD);
             return "redirect:/cabinet";
         } catch (AccountService.EmailTakenException e) {
             attempts.failed(request);
@@ -152,69 +167,71 @@ public class AuthController {
 
         AccountService.Account account = accounts.findOrCreateByIdentity(
                 IdentityProvider.TELEGRAM, user.get().id(), user.get().name(), null);
-        sessionLogin.signIn(request, response, account);
+        sessionLogin.signIn(request, response, account, SessionLogin.Door.TELEGRAM);
         return "redirect:/cabinet";
     }
 
     /* ───────── вход через бота ───────── */
 
     /**
-     * Начинает вход через бота: выдаёт код и уводит на страницу ожидания.
+     * Страница по ссылке из чата: «войти как …?».
      *
-     * <p>Код кладётся в сессию, а не в адрес: войти должен именно тот браузер,
-     * который вход начал. Иначе подсмотренная ссылка на страницу ожидания
-     * пускала бы в чужой аккаунт вместе с подтверждением.</p>
-     */
-    @PostMapping("/auth/bot")
-    public String startBotLogin(HttpServletRequest request) {
-        BotLoginService.Issued issued = botLogins.issue();
-        request.getSession(true).setAttribute(BOT_LOGIN_CODE, issued.code());
-        request.getSession(true).setAttribute(BOT_LOGIN_NUMBER, issued.checkNumber());
-        return "redirect:/auth/bot/wait";
-    }
-
-    /**
-     * Страница ожидания: обновляется сама, пока не придёт подтверждение.
+     * <p>Открытие ссылки её не гасит. По адресам ходят не только люди:
+     * Telegram тянет предпросмотр, антивирусы и почтовые фильтры открывают их
+     * сами, — и гашение на GET сожгло бы вход до того, как человек его увидит.
+     * Поэтому вход завершает отдельное нажатие, то есть POST с токеном формы.</p>
      *
-     * <p>Обновление сделано {@code meta refresh}, а не скриптом: страница
-     * должна работать и там, где JavaScript выключен, а опрос раз в три
-     * секунды на пять минут — это меньше сотни запросов.</p>
+     * <p>Имя показывается, чтобы человек видел, в какой аккаунт его пускают:
+     * ссылка могла прийти и не из его чата.</p>
      */
-    @GetMapping("/auth/bot/wait")
-    public String waitForBotLogin(HttpServletRequest request, HttpServletResponse response,
-                                  Model model) {
-        String code = (String) request.getSession(true).getAttribute(BOT_LOGIN_CODE);
-        if (code == null) {
-            return "redirect:/login";
+    @GetMapping("/auth/enter/{token}")
+    public String enterPage(@PathVariable String token, Model model) {
+        Optional<String> name = botLogins.nameOf(token);
+        if (name.isEmpty()) {
+            return expiredLink(model);
         }
 
-        BotLoginService.State state = botLogins.stateOf(code);
-        if (state == BotLoginService.State.CONFIRMED) {
-            Optional<AccountService.Account> account = botLogins.claim(code);
-            request.getSession(true).removeAttribute(BOT_LOGIN_CODE);
-            request.getSession(true).removeAttribute(BOT_LOGIN_NUMBER);
-            if (account.isPresent()) {
-                sessionLogin.signIn(request, response, account.get());
-                return "redirect:/cabinet";
-            }
-        }
-
-        if (state == BotLoginService.State.EXPIRED || state == BotLoginService.State.UNKNOWN) {
-            request.getSession(true).removeAttribute(BOT_LOGIN_CODE);
-            request.getSession(true).removeAttribute(BOT_LOGIN_NUMBER);
-            fillLoginOptions(model);
-            model.addAttribute("error", "Время ожидания вышло. Начните вход заново.");
-            return "login";
-        }
-
-        model.addAttribute("botName", botName);
-        model.addAttribute("code", code);
-        model.addAttribute("checkNumber", request.getSession(true).getAttribute(BOT_LOGIN_NUMBER));
-        model.addAttribute("botLink", "https://t.me/" + botName + "?start=login_" + code);
+        model.addAttribute("token", token);
+        model.addAttribute("name", name.get());
         return "bot-login";
     }
 
+    /**
+     * Нажатие на странице: гасим ссылку и заводим сессию.
+     *
+     * <p>О входе тут же сообщается в чат — это единственное, что работает
+     * против пересланной своими руками ссылки: человек видит вход сразу, а не
+     * когда пропадут расшифровки.</p>
+     */
+    @PostMapping("/auth/enter")
+    public String enter(@RequestParam String token, HttpServletRequest request,
+                        HttpServletResponse response, Model model) {
+        Optional<BotLoginService.Entry> entry = botLogins.claim(token);
+        if (entry.isEmpty()) {
+            return expiredLink(model);
+        }
+
+        sessionLogin.signIn(request, response, entry.get().account(), SessionLogin.Door.BOT_LINK);
+        loginNotice.entered(entry.get().chatId(), request);
+        return "redirect:/cabinet";
+    }
+
     /* ───────── helpers ───────── */
+
+    /**
+     * Ссылка не годится — и почему именно, человеку знать незачем.
+     *
+     * <p>Неизвестная, просроченная и уже сработавшая отвечают одинаково: по
+     * разнице ответов ссылки перебирали бы, а взять новую всё равно можно
+     * только там, где выдали первую, — в чате.</p>
+     */
+    private String expiredLink(Model model) {
+        fillLoginOptions(model);
+        model.addAttribute("error",
+                "Ссылка устарела или уже сработала. Попросите в боте новую — "
+                        + "кнопка «Войти на сайт».");
+        return "login";
+    }
 
     private String registrationFailed(Model model, String message) {
         fillLoginOptions(model);

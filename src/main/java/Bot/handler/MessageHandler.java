@@ -24,6 +24,7 @@ import Bot.telegram.Keyboards;
 import Bot.telegram.MessageSender;
 import Bot.telegram.TelegramFileDownloader;
 import Bot.owner.Owner;
+import Bot.service.MediaFiles;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskExecutor;
@@ -46,9 +47,6 @@ public class MessageHandler {
 
     private static final Pattern URL_PATTERN = Pattern.compile(
             "https?://[\\w\\d\\-._~:/?#\\[\\]@!$&'()*+,;=%]+");
-
-    private static final List<String> VIDEO_EXTENSIONS =
-            List.of(".mp4", ".avi", ".mkv", ".mov", ".webm");
 
     /**
      * Пул Spring Boot. Имя поля обязано совпадать с именем бина: в Boot 3.5
@@ -143,7 +141,7 @@ public class MessageHandler {
         log.info("Получен документ: chatId={}, файл='{}', размер={}",
                 chatId, fileName, document.getFileSize());
 
-        if (!isMediaFile(fileName)) {
+        if (!MediaFiles.isMedia(fileName)) {
             log.info("Документ отклонён как неподдерживаемый: chatId={}, файл='{}'", chatId, fileName);
             commandHandler.showMenu(chatId,
                     "❌ Такой файл я расшифровать не смогу. Пришлите аудио или видео.");
@@ -254,17 +252,6 @@ public class MessageHandler {
         return urls;
     }
 
-    /** Документ имеет смысл расшифровывать, только если это аудио или видео. */
-    private boolean isMediaFile(String fileName) {
-        if (fileName == null) {
-            return false;
-        }
-        String lower = fileName.toLowerCase();
-        return VIDEO_EXTENSIONS.stream().anyMatch(lower::endsWith)
-                || lower.endsWith(".mp3") || lower.endsWith(".wav")
-                || lower.endsWith(".m4a") || lower.endsWith(".ogg")
-                || lower.endsWith(".flac");
-    }
 
     /** Короткое объяснение сбоя вместо стектрейса. */
     private String transcribeErrorMessage(Exception e) {

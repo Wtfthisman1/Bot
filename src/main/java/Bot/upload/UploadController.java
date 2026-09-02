@@ -4,8 +4,9 @@ import Bot.account.QuotaService;
 import Bot.config.Profiles;
 import Bot.home.HomeApi;
 import Bot.owner.Owner;
-import Bot.processing.JobStore;
+import Bot.processing.JobAdmission;
 import Bot.processing.ProcessingJob;
+import Bot.service.MediaFiles;
 import Bot.service.StorageManager;
 import Bot.service.SupportedPlatforms;
 import Bot.telegram.Keyboards;
@@ -33,7 +34,8 @@ import java.nio.file.Path;
  *
  * <p>Ответственность: отдаёт HTML-форму и принимает multipart-запросы до 5
  * файлов и 5 ссылок. Валидирует одноразовый токен, сохраняет файлы и ставит
- * задачи в {@link JobStore}. URL формы: <b>/upload/{token}</b>.</p>
+ * задачи через {@link JobAdmission} — он же и решает, пускать ли их.
+ * URL формы: <b>/upload/{token}</b>.</p>
  */
 @Profile(Profiles.HOME)
 @RestController
@@ -45,7 +47,7 @@ public class UploadController {
     private static final int MAX_SLOTS = 5;
 
     private final UploadService  uploadService;
-    private final JobStore       jobStore;
+    private final JobAdmission   admission;
     private final StorageManager storageManager;
     private final QuotaService   quotas;
     private final MessageSender  messageSender;
@@ -120,23 +122,43 @@ public class UploadController {
         int acceptedUrls = 0;
         int overQuota = 0;
         int unsupported = 0;
+        int noRoom = 0;
 
         /* ---------- 2. файлы ---------- */
         if (files != null) {
             for (MultipartFile f : files) {
                 if (f == null || f.isEmpty()) continue;
-                // Квота спрашивается на каждую задачу, а не один раз на запрос:
-                // одной проверки хватало на пять файлов и пять ссылок разом,
-                // то есть лимит в три расшифровки давал десять
-                if (!quotas.allows(owner)) {
-                    overQuota++;
+                // Форма принимала любой файл до 2,5 ГБ — хоть архив, хоть образ
+                // диска: он ложился на диск домашней машины, а задача падала
+                // уже на ffmpeg
+                if (!MediaFiles.isMedia(f.getOriginalFilename())) {
+                    log.warn("Отклонён файл неподходящего вида: владелец={}", owner);
+                    unsupported++;
                     continue;
                 }
+                // Квота спрашивается на каждую задачу, а не один раз на запрос:
+                // одной проверки хватало на пять файлов и пять ссылок разом,
+                // то есть лимит в три расшифровки давал десять.
+                //
+                // Предел, место и квота считаются вместе с постановкой в
+                // очередь (JobAdmission): врозь между «посчитал» и «поставил»
+                // помещался соседний запрос того же человека. Плата за это —
+                // файл сохраняется до приговора и удаляется при отказе
                 Path dst = storageManager.uploadedPath(owner, f.getOriginalFilename());
+                f.transferTo(dst);                                     // сохраняем
+                JobAdmission.Verdict verdict =
+                        admission.admit(ProcessingJob.newFile(owner, dst));
+                if (!verdict.accepted()) {
+                    deleteQuietly(dst);
+                    if (verdict == JobAdmission.Verdict.NO_ROOM) {
+                        noRoom++;
+                    } else {
+                        overQuota++;
+                    }
+                    continue;
+                }
                 log.info("Принят файл через форму: владелец={}, имя='{}', размер={} байт",
                         owner, f.getOriginalFilename(), f.getSize());
-                f.transferTo(dst);                                     // сохраняем
-                jobStore.enqueue(ProcessingJob.newFile(owner, dst));   // сразу в очередь
                 acceptedFiles++;
             }
         }
@@ -154,24 +176,36 @@ public class UploadController {
                     unsupported++;
                     continue;
                 }
-                if (!quotas.allows(owner)) {
-                    overQuota++;
+                JobAdmission.Verdict verdict =
+                        admission.admit(ProcessingJob.newLink(owner, link));
+                if (!verdict.accepted()) {
+                    if (verdict == JobAdmission.Verdict.NO_ROOM) {
+                        noRoom++;
+                    } else {
+                        overQuota++;
+                    }
                     continue;
                 }
-                jobStore.enqueue(ProcessingJob.newLink(owner, link));
                 acceptedUrls++;
             }
         }
 
-        log.info("Принято от {}: {} файлов, {} ссылок; отклонено: по квоте {}, по площадке {}",
-                owner, acceptedFiles, acceptedUrls, overQuota, unsupported);
+        log.info("Принято от {}: {} файлов, {} ссылок; отклонено: по квоте {}, "
+                        + "по виду {}, по месту {}",
+                owner, acceptedFiles, acceptedUrls, overQuota, unsupported, noRoom);
 
         if (acceptedFiles == 0 && acceptedUrls == 0) {
-            // Код отражает причину: неподдерживаемая ссылка — это ошибка в
-            // запросе, а исчерпанный лимит — «слишком часто»
+            // Код отражает причину: неподходящий файл или ссылка — это ошибка в
+            // запросе, кончившееся место — тоже, а исчерпанный лимит — «слишком часто»
+            if (noRoom > 0 && overQuota == 0) {
+                return ResponseEntity.badRequest().body("Не хватает места: на аккаунт отведено "
+                        + storageManager.maxBytesPerOwner() / 1073741824 + " ГБ. "
+                        + "Старые записи уносит ночная чистка через две недели.");
+            }
             if (unsupported > 0 && overQuota == 0) {
                 return ResponseEntity.badRequest()
                         .body(HomeApi.Acceptance.UNSUPPORTED.userMessage() + "\n\n"
+                                + MediaFiles.supportedListText() + "\n\n"
                                 + supportedPlatforms.supportedListText());
             }
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
@@ -179,18 +213,21 @@ public class UploadController {
         }
 
         tellOwner(owner, acceptedFiles, acceptedUrls);
-        return ResponseEntity.ok(answer(overQuota, unsupported));
+        return ResponseEntity.ok(answer(overQuota, unsupported, noRoom));
     }
 
     /** Честный ответ формы: что взяли и что не взяли. */
-    private static String answer(int overQuota, int unsupported) {
+    private static String answer(int overQuota, int unsupported, int noRoom) {
         StringBuilder text = new StringBuilder("Принято! Задачи поставлены в очередь.");
         if (overQuota > 0) {
             text.append(" Не влезло в лимит: ").append(overQuota).append('.');
         }
         if (unsupported > 0) {
-            text.append(" Отклонено ссылок с неподдерживаемых площадок: ")
+            text.append(" Отклонено неподходящих файлов и ссылок: ")
                     .append(unsupported).append('.');
+        }
+        if (noRoom > 0) {
+            text.append(" Не хватило места для: ").append(noRoom).append('.');
         }
         return text.toString();
     }
@@ -219,5 +256,14 @@ public class UploadController {
                 + "Ссылка на форму больше не действует — за новой нажмите «Загрузить файлы».");
         messageSender.sendMessageWithKeyboard(owner.telegramChatId(), text.toString(),
                 null, Keyboards.mainMenu());
+    }
+
+    /** Сохранённый файл, для которого задачи не будет, места занимать не должен. */
+    private static void deleteQuietly(Path file) {
+        try {
+            java.nio.file.Files.deleteIfExists(file);
+        } catch (java.io.IOException e) {
+            log.warn("Не удалось убрать файл непринятой загрузки: {}", file, e);
+        }
     }
 }

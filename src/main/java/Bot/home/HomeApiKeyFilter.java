@@ -35,10 +35,19 @@ public class HomeApiKeyFilter extends OncePerRequestFilter {
     @Value("${home.api.key:}")
     private String expectedKey;
 
-    /** Фильтр висит на всех запросах, но касается только внутренних адресов. */
+    /**
+     * Фильтр висит на всех запросах, но касается только внутренних адресов.
+     *
+     * <p>Сравнение без учёта регистра: сам по себе {@code /INTERNAL/...} до
+     * контроллера не доходит (Spring сопоставляет пути с учётом регистра, и это
+     * будет 404), но правило «что закрыто» не должно держаться на совпадении
+     * двух разных механизмов. Ошибиться здесь можно только в одну сторону —
+     * лишний раз спросить ключ.</p>
+     */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/internal/");
+        String uri = request.getRequestURI();
+        return uri == null || !uri.toLowerCase(java.util.Locale.ROOT).startsWith("/internal/");
     }
 
     @Override

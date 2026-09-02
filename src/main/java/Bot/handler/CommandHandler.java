@@ -32,15 +32,18 @@ import java.util.Optional;
 @Slf4j
 public class CommandHandler {
 
+    /**
+     * Нагрузка {@code /start}, которой страница входа зовёт выдать ссылку.
+     *
+     * <p>Секрета не несёт: что бы в ней ни пришло, ссылка выдаётся тому чату,
+     * который её попросил. Поэтому подсунуть её чужому человеку бессмысленно —
+     * он получит вход в свой же аккаунт.</p>
+     */
+    private static final String LOGIN_PAYLOAD = "login";
+
     private final HomeApi home;
     private final MessageSender messageSender;
     private final UserSessionService sessionService;
-
-    /** Приставка полезной нагрузки {@code /start}, которой сайт просит подтвердить вход. */
-    private static final String LOGIN_PAYLOAD = "login_";
-
-    /** То же для привязки этого чата к аккаунту на сайте. */
-    private static final String LINK_PAYLOAD = "link_";
 
     /** Маршрутизация текстовых команд на те же экраны, что и кнопки. */
     public void handleCommand(long chatId, String text, String name) {
@@ -49,14 +52,15 @@ public class CommandHandler {
         log.info("Команда: chatId={}, команда='{}'", chatId, command);
 
         switch (command) {
+            // Единственная полезная нагрузка — слово «login» со страницы входа,
+            // и в ней нет никакого секрета: бот выдаёт ссылку тому чату, который
+            // её попросил. Раньше здесь приходило «/start login_<код>» или
+            // «/start link_<код>», и человек одним нажатием подтверждал
+            // действие, начатое кем-то другим, — такую ссылку можно было
+            // прислать постороннему под любым предлогом
             case "/start" -> {
-                // По ссылке с сайта Telegram присылает «/start login_<код>»:
-                // это не приветствие, а просьба подтвердить вход
-                String payload = payloadOf(text);
-                if (payload.startsWith(LOGIN_PAYLOAD)) {
-                    askLoginConfirmation(chatId, payload.substring(LOGIN_PAYLOAD.length()));
-                } else if (payload.startsWith(LINK_PAYLOAD)) {
-                    askLinkConfirmation(chatId, payload.substring(LINK_PAYLOAD.length()));
+                if (LOGIN_PAYLOAD.equals(payloadOf(text))) {
+                    login(chatId, name);
                 } else {
                     start(chatId, name);
                 }
@@ -66,6 +70,7 @@ public class CommandHandler {
             case "/download" -> askDownloadKind(chatId);
             case "/upload" -> upload(chatId);
             case "/status" -> status(chatId);
+            case "/login" -> login(chatId, name);
             case "/link" -> link(chatId, text);
             case "/cancel" -> cancel(chatId);
             default -> {
@@ -146,10 +151,11 @@ public class CommandHandler {
                 • Расшифровок — три в месяц; скачивание в лимит не входит
 
                 🔐 <b>Сайт</b> — та же история задач и тот же лимит.
-                Войти можно прямо через этого бота, без номера телефона:
-                кнопка «Войти через бота» на transcribot.site.
-                Если аккаунт на сайте уже заведён иначе, пришлите код из
-                кабинета: <code>/link КОД</code>
+                Вход без пароля и без номера телефона: кнопка «Войти на сайт»
+                здесь или команда <code>/login</code>. Бот пришлёт ссылку —
+                откройте её, и кабинет откроется сам.
+                Если аккаунт на сайте уже заведён иначе, возьмите код в кабинете
+                и пришлите его сюда: <code>/link КОД</code>
 
                 🔗 <b>Ссылки:</b> YouTube, Vimeo, TikTok, Instagram, Twitter/X, Facebook
 
@@ -216,65 +222,47 @@ public class CommandHandler {
     }
 
     /**
-     * Спрашивает, точно ли это тот самый человек входит на сайт.
+     * Выдаёт одноразовую ссылку на вход в кабинет.
      *
-     * <p>Подтверждение отдельной кнопкой, а не самим переходом по ссылке: её
-     * можно прислать постороннему, и тогда нажатие «Запустить» пустило бы
-     * отправителя в чужой аккаунт. В тексте назван домен — человек видит,
-     * куда именно его пускают.</p>
+     * <p>Вход начинается здесь, а не на странице сайта, и это главное. Ссылка
+     * рождается из этого чата и приходит только в него: прислать постороннему
+     * нечего — ссылки на чужой аккаунт не существует. Раньше было наоборот:
+     * страница заводила код, а подтверждать шли в чат, и достаточно было
+     * прислать человеку ссылку под благовидным предлогом, чтобы он подтвердил
+     * чужой вход.</p>
+     *
+     * <p>Имя из чата едет вместе с просьбой: его покажет страница входа, чтобы
+     * человек видел, в какой аккаунт его пускают.</p>
      */
-    public void askLoginConfirmation(long chatId, String code) {
-        if (code.isBlank()) {
-            start(chatId, null);
-            return;
-        }
-        log.info("Запрошено подтверждение входа на сайт: chatId={}", chatId);
+    public void login(long chatId, String name) {
+        messageSender.sendChatAction(chatId, "typing");
 
-        // Числа спрашиваем у дома: какое из них верное, знает только он.
-        // Без них кнопка «Это я» подтверждала бы вход человеку, который никакой
-        // страницы не открывал, — а войти успел бы тот, кто прислал ему ссылку
-        List<Integer> numbers;
+        Optional<String> link;
         try {
-            numbers = home.loginChallenge(code);
+            link = home.loginLink(chatId, name);
         } catch (Exception e) {
-            log.error("Не удалось получить числа для входа: chatId={}", chatId, e);
-            showMenu(chatId, "🌙 Сейчас не выходит подтвердить вход — рабочая машина недоступна.");
+            log.error("Не удалось выдать ссылку входа: chatId={}", chatId, e);
+            showMenu(chatId, "🌙 Сейчас вход на сайт не выдать — рабочая машина недоступна.");
             return;
         }
 
-        if (numbers.isEmpty()) {
-            showMenu(chatId, "🕓 Код устарел или уже сработал. Откройте страницу входа заново.");
+        if (link.isEmpty()) {
+            showMenu(chatId, "🕓 Слишком много ссылок за раз. Подождите немного и попробуйте снова.");
             return;
         }
 
-        messageSender.sendMessageWithKeyboard(chatId,
-                "🔐 Вход на сайт <b>transcribot.site</b>.\n\n"
-                        + "На странице входа показано двузначное число — выберите его ниже.\n\n"
-                        + "❗ Если вы сейчас не открывали страницу входа и никакого числа "
-                        + "не видите, <b>не угадывайте</b>: нажмите «Это не я». "
-                        + "Ссылку мог прислать посторонний, чтобы войти в ваш аккаунт.",
-                "HTML", Keyboards.loginConfirm(code, numbers));
-    }
+        log.info("Ссылка входа отправлена в чат: chatId={}", chatId);
+        String html = """
+                🔐 <b>Вход в кабинет</b>
 
-    /**
-     * Спрашивает, привязывать ли этот чат к аккаунту с сайта.
-     *
-     * <p>Отдельное подтверждение по той же причине, что и у входа: ссылку с
-     * кодом можно прислать другому человеку, и без вопроса его переписка
-     * досталась бы отправителю — вместе с расшифровками.</p>
-     */
-    public void askLinkConfirmation(long chatId, String code) {
-        if (code.isBlank()) {
-            start(chatId, null);
-            return;
-        }
-        log.info("Запрошено подтверждение привязки чата: chatId={}", chatId);
-        messageSender.sendMessageWithKeyboard(chatId,
-                "🔗 Связать этот чат с вашим аккаунтом на <b>transcribot.site</b>?\n\n"
-                        + "После этого всё, что вы пришлёте боту, будет видно в кабинете, "
-                        + "а лимит расшифровок станет общим.\n\n"
-                        + "Если вы не открывали кабинет и не просили код — нажмите «Нет».",
-                "HTML", Keyboards.linkConfirm(code));
+                <a href="%s">Открыть кабинет</a>
+
+                Ссылка действует 3 минуты и срабатывает один раз.
+                ❗ Никому её не пересылайте: кто откроет — тот и войдёт
+                в ваш аккаунт.
+                """.formatted(MessageSender.escapeHtml(link.get()));
+
+        messageSender.sendMessage(chatId, html.strip(), "HTML");
     }
 
     /**
@@ -300,8 +288,10 @@ public class CommandHandler {
     /**
      * Гасит код привязки и отвечает человеку.
      *
-     * <p>Сюда сходятся оба пути — набранная команда {@code /link КОД} и кнопка
-     * под ссылкой с сайта, — чтобы тексты ответов не разъезжались.</p>
+     * <p>Код человек набирает руками, глядя в свой кабинет. Кнопки «Да, это мой
+     * аккаунт» под присланной ссылкой больше нет: нажатие подтверждало
+     * действие, которое начал кто-то другой, и посторонний одним касанием
+     * отдавал свою переписку вместе со всеми расшифровками.</p>
      */
     public void redeemLink(long chatId, String code) {
         try {
@@ -393,7 +383,8 @@ public class CommandHandler {
         showMenu(chatId, "🤷 Эту задачу уже не остановить — она успела доделаться или снята раньше.");
     }
 
-    /** То, что идёт после команды: «/start login_ABC» → «login_ABC». */
+
+    /** То, что идёт после команды: «/start login» → «login». */
     private static String payloadOf(String text) {
         String[] parts = text.trim().split("\\s+", 2);
         return parts.length < 2 ? "" : parts[1].trim();

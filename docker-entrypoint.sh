@@ -24,6 +24,26 @@ check_env
 log "Создание директорий..."
 mkdir -p "${UPLOAD_DIR:-/app/upload}" /app/logs "${XDG_CACHE_HOME:-/app/.cache}"
 
+# Сброс прав: дальше всё идёт от transcribot, а не от root.
+#
+# Внутри контейнера работают yt-dlp и ffmpeg — на чужих файлах и чужих
+# ссылках. Пока процесс шёл от root, выход из любого из них означал root в
+# контейнере целиком. Начать root'ом всё же приходится: каталоги upload и logs
+# монтируются с хоста, и владельца им выставить может только он.
+APP_USER="${APP_USER:-transcribot}"
+if [[ "$(id -u)" == "0" ]] && id -u "$APP_USER" >/dev/null 2>&1; then
+    log "Выравнивание прав на каталогах для $APP_USER..."
+    # Только смонтированное: остальное уже принадлежит нужному пользователю
+    # с самой сборки, а рекурсивный chown по /app стоил бы минуты на старте
+    chown -R "$APP_USER" "${UPLOAD_DIR:-/app/upload}" /app/logs "${XDG_CACHE_HOME:-/app/.cache}" || \
+        log "WARNING: владелец каталогов не сменился — на хосте нужен chown -R 10001 ./upload ./logs"
+    log "Продолжаем от пользователя $APP_USER"
+    # setpriv из util-linux, а не su или gosu: он уже есть в образе, не
+    # заводит новый пароль/сессию и не оставляет между собой и java лишний
+    # процесс — сигнал остановки от Docker доходит до приложения напрямую
+    exec setpriv --reuid="$APP_USER" --regid="$APP_USER" --init-groups "$0" "$@"
+fi
+
 # Опциональная предзагрузка моделей Whisper
 if [[ -n "${WHISPER_PRELOAD_MODELS:-}" ]]; then
     log "Предзагрузка Whisper моделей: ${WHISPER_PRELOAD_MODELS}"

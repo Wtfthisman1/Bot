@@ -1,8 +1,14 @@
 package Bot.account;
 
 /**
- * Вход через бота: код ждёт подтверждения, срабатывает один раз и приводит
- * в тот же аккаунт, что и виджет Telegram.
+ * Вход через бота: ссылку выдаёт чат, она срабатывает один раз и приводит в тот
+ * же аккаунт, что и виджет Telegram.
+ *
+ * <p>Главное свойство здесь — направление. Ссылка заводится для конкретного
+ * чата и ведёт только в его аккаунт, поэтому «прислать чужую ссылку» нельзя в
+ * принципе: чужой ссылки не существует. Раньше вход начинала страница, а
+ * подтверждали его в чате, и проверять приходилось совсем другое — что
+ * посторонний не угадает число сверки.</p>
  */
 import Bot.support.PostgresTestContainer;
 import org.junit.jupiter.api.AfterEach;
@@ -29,76 +35,56 @@ class BotLoginServiceTest {
 
     @Autowired BotLoginService logins;
     @Autowired AccountService accounts;
-    @Autowired BotLoginCodeRepository codes;
+    @Autowired BotLoginLinkRepository links;
     @Autowired AccountRepository accountRepository;
 
     @AfterEach
     void clean() {
-        codes.deleteAll();
+        links.deleteAll();
         accountRepository.deleteAll();
     }
 
     @Test
-    void freshCodeWaitsForConfirmation() {
-        BotLoginService.Issued issued = logins.issue();
+    void issuedLinkPointsAtThisSite() {
+        String link = logins.issue(CHAT_ID, "Аня").orElseThrow();
 
-        assertThat(logins.stateOf(issued.code())).isEqualTo(BotLoginService.State.WAITING);
-        assertThat(logins.claim(issued.code())).isEmpty();
-    }
-
-    @Test
-    void confirmedCodeLetsTheBrowserIn() {
-        BotLoginService.Issued issued = logins.issue();
-
-        assertThat(logins.confirm(CHAT_ID, issued.code(), "Аня", issued.checkNumber()))
-                .isEqualTo(BotLoginService.Confirmation.CONFIRMED);
-        assertThat(logins.stateOf(issued.code())).isEqualTo(BotLoginService.State.CONFIRMED);
-        assertThat(logins.claim(issued.code())).isPresent();
+        assertThat(link).contains("/auth/enter/");
+        assertThat(tokenOf(link)).isNotBlank();
     }
 
     /**
-     * Главное свойство сверки: подтвердить вход может только тот, кто видит
-     * страницу. Ссылку можно прислать постороннему под любым предлогом, и
-     * раньше ему хватало нажать «Это я».
+     * Открытие ссылки её не гасит: по адресам ходят предпросмотр Telegram и
+     * антивирусы, и вход сгорал бы до того, как человек его увидит.
      */
     @Test
-    void wrongNumberBurnsTheCode() {
-        BotLoginService.Issued issued = logins.issue();
-        int wrong = issued.checkNumber() == 42 ? 43 : 42;
+    void lookingAtTheLinkDoesNotBurnIt() {
+        String token = tokenOf(logins.issue(CHAT_ID, "Аня").orElseThrow());
 
-        assertThat(logins.confirm(CHAT_ID, issued.code(), "Аня", wrong))
-                .isEqualTo(BotLoginService.Confirmation.WRONG_NUMBER);
-
-        // Второй попытки нет: у того, кому прислали чужую ссылку, её быть не должно
-        assertThat(logins.confirm(CHAT_ID, issued.code(), "Аня", issued.checkNumber()))
-                .isEqualTo(BotLoginService.Confirmation.STALE);
-        assertThat(logins.claim(issued.code())).isEmpty();
+        assertThat(logins.nameOf(token)).contains("Аня");
+        assertThat(logins.nameOf(token)).contains("Аня");
+        assertThat(logins.claim(token)).isPresent();
     }
 
+    /** Второй браузер по той же ссылке войти не должен. */
     @Test
-    void challengeContainsTheRealNumberAmongOthers() {
-        BotLoginService.Issued issued = logins.issue();
+    void linkWorksExactlyOnce() {
+        String token = tokenOf(logins.issue(CHAT_ID, "Аня").orElseThrow());
 
-        var numbers = logins.challengeFor(issued.code());
-        assertThat(numbers).hasSize(3).doesNotHaveDuplicates()
-                .contains(issued.checkNumber());
-        assertThat(numbers).allMatch(n -> n >= 10 && n <= 99);
+        assertThat(logins.claim(token)).isPresent();
+        assertThat(logins.claim(token)).isEmpty();
+        assertThat(logins.nameOf(token)).isEmpty();
     }
 
+    /** Ссылка ведёт в аккаунт того чата, который её попросил, — и ничей больше. */
     @Test
-    void challengeForAnUnknownCodeTellsNothing() {
-        assertThat(logins.challengeFor("нет-такого")).isEmpty();
-    }
+    void linkLandsInTheChatsOwnAccount() {
+        AccountService.Account mine = accounts.forTelegramChat(CHAT_ID, "Аня");
+        String token = tokenOf(logins.issue(CHAT_ID, "Аня").orElseThrow());
 
-    /** Второй браузер по тому же коду войти не должен. */
-    @Test
-    void codeWorksExactlyOnce() {
-        BotLoginService.Issued issued = logins.issue();
-        logins.confirm(CHAT_ID, issued.code(), "Аня", issued.checkNumber());
-
-        assertThat(logins.claim(issued.code())).isPresent();
-        assertThat(logins.claim(issued.code())).isEmpty();
-        assertThat(logins.stateOf(issued.code())).isEqualTo(BotLoginService.State.UNKNOWN);
+        assertThat(logins.claim(token))
+                .map(BotLoginService.Entry::account)
+                .map(AccountService.Account::id)
+                .contains(mine.id());
     }
 
     /** Вход через бота и вход виджетом — одна и та же учётная запись. */
@@ -107,33 +93,46 @@ class BotLoginServiceTest {
         AccountService.Account viaWidget = accounts.findOrCreateByIdentity(
                 IdentityProvider.TELEGRAM, String.valueOf(CHAT_ID), "Аня", null);
 
-        BotLoginService.Issued issued = logins.issue();
-        logins.confirm(CHAT_ID, issued.code(), "Аня", issued.checkNumber());
+        String token = tokenOf(logins.issue(CHAT_ID, "Аня").orElseThrow());
 
-        assertThat(logins.claim(issued.code()))
+        assertThat(logins.claim(token))
+                .map(BotLoginService.Entry::account)
                 .map(AccountService.Account::id)
                 .contains(viaWidget.id());
         assertThat(accountRepository.count()).isEqualTo(1);
     }
 
     @Test
-    void unknownCodeIsRefused() {
-        assertThat(logins.confirm(CHAT_ID, "нет-такого", null, 42))
-                .isEqualTo(BotLoginService.Confirmation.STALE);
-        assertThat(logins.stateOf("нет-такого")).isEqualTo(BotLoginService.State.UNKNOWN);
+    void unknownTokenLetsNobodyIn() {
+        assertThat(logins.nameOf("нет-такого")).isEmpty();
+        assertThat(logins.claim("нет-такого")).isEmpty();
     }
 
-    /** Код в открытой вкладке не должен жить вечно. */
+    /** Ссылка лежит в переписке, поэтому долго жить ей нельзя. */
     @Test
-    void expiredCodeIsRefusedEvenBeforeConfirmation() {
-        BotLoginService.Issued issued = logins.issue();
-        BotLoginCodeEntity entity = codes.findById(issued.code()).orElseThrow();
+    void expiredLinkIsRefused() {
+        String token = tokenOf(logins.issue(CHAT_ID, "Аня").orElseThrow());
+        BotLoginLinkEntity entity = links.findById(token).orElseThrow();
         entity.setExpiresAt(Instant.now().minus(Duration.ofMinutes(1)));
-        codes.save(entity);
+        links.save(entity);
 
-        assertThat(logins.stateOf(issued.code())).isEqualTo(BotLoginService.State.EXPIRED);
-        assertThat(logins.confirm(CHAT_ID, issued.code(), "Аня", issued.checkNumber()))
-                .isEqualTo(BotLoginService.Confirmation.STALE);
-        assertThat(logins.claim(issued.code())).isEmpty();
+        assertThat(logins.nameOf(token)).isEmpty();
+        assertThat(logins.claim(token)).isEmpty();
+    }
+
+    /** Ссылку нельзя просить без счёта: это запись в базу и сообщение в чат. */
+    @Test
+    void tooManyLinksAreRefused() {
+        for (int i = 0; i < 5; i++) {
+            assertThat(logins.issue(CHAT_ID, "Аня")).isPresent();
+        }
+        assertThat(logins.issue(CHAT_ID, "Аня")).isEmpty();
+
+        // Соседний чат за это не отвечает
+        assertThat(logins.issue(CHAT_ID + 1, "Не Аня")).isPresent();
+    }
+
+    private static String tokenOf(String link) {
+        return link.substring(link.lastIndexOf('/') + 1);
     }
 }

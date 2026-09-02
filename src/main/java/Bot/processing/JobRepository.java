@@ -62,6 +62,10 @@ public interface JobRepository extends JpaRepository<JobEntity, UUID> {
     long countByOwnerTypeAndOwnerIdAndDownloadIdIsNullAndStateNotInAndCreatedAtGreaterThanEqual(
             Owner.OwnerType ownerType, String ownerId, List<JobState> states, Instant since);
 
+    /** Сколько задач владельца ещё не доделано — предел на одного заказчика. */
+    long countByOwnerTypeAndOwnerIdAndStateIn(
+            Owner.OwnerType ownerType, String ownerId, List<JobState> states);
+
     /** Незавершённые задачи владельца — их показывает «Статус» и их можно отменить. */
     List<JobEntity> findByOwnerTypeAndOwnerIdAndStateInOrderByCreatedAtDesc(
             Owner.OwnerType ownerType, String ownerId, List<JobState> states);

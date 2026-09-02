@@ -48,6 +48,41 @@ class JobStoreTest {
         repository.deleteAll();
     }
 
+    /**
+     * Предел незавершённых задач на владельца.
+     *
+     * <p>Очередь одна на всех и разбирается по порядку поступления, а
+     * скачивание квоты не тратит вовсе. Без предела один чат ставил сколько
+     * угодно загрузок и занимал очередь, видеокарту и диск всем остальным,
+     * не нарушив ни одного правила.</p>
+     */
+    @Test
+    void oneOwnerCannotFillTheWholeQueue() {
+        assertThat(store.tooManyActive(OWNER)).isFalse();
+
+        for (int i = 0; i < 10; i++) {
+            store.enqueue(ProcessingJob.newLink(OWNER, URL));
+        }
+
+        assertThat(store.tooManyActive(OWNER)).isTrue();
+        // Соседи за это не отвечают
+        assertThat(store.tooManyActive(Owner.telegram(43L))).isFalse();
+    }
+
+    /** Доделанные задачи предел не занимают: иначе он был бы пожизненным. */
+    @Test
+    void finishedJobsFreeTheOwnersSlot() {
+        java.util.List<ProcessingJob> jobs = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            jobs.add(store.enqueue(ProcessingJob.newLink(OWNER, URL)));
+        }
+        assertThat(store.tooManyActive(OWNER)).isTrue();
+
+        store.complete(jobs.get(0).id(), null);
+
+        assertThat(store.tooManyActive(OWNER)).isFalse();
+    }
+
     @Test
     void queuedJobIsHandedOutOnce() {
         ProcessingJob job = store.enqueue(ProcessingJob.newLink(OWNER, URL));

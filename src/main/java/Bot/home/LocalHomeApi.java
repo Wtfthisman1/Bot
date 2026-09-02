@@ -17,6 +17,7 @@ package Bot.home;
  */
 import Bot.account.AccountService;
 import Bot.account.BotLoginService;
+import Bot.account.LinkAttempts;
 import Bot.account.QuotaService;
 import Bot.config.Profiles;
 import Bot.download.DownloadService;
@@ -24,6 +25,7 @@ import Bot.insight.InsightKind;
 import Bot.insight.InsightService;
 import Bot.owner.Owner;
 import Bot.service.SupportedPlatforms;
+import Bot.processing.JobAdmission;
 import Bot.processing.JobEntity;
 import Bot.processing.JobState;
 import Bot.processing.JobStore;
@@ -51,15 +53,18 @@ import java.util.UUID;
 public class LocalHomeApi implements HomeApi {
 
     private final JobStore jobStore;
+    private final JobAdmission admission;
     private final QuotaService quotas;
     private final AccountService accounts;
     private final BotLoginService botLogins;
+    private final LinkAttempts linkAttempts;
     private final DownloadService downloadService;
     private final UploadService uploadService;
     private final TelegramFileDownloader fileDownloader;
     private final TranscriptDeliveryService transcriptDelivery;
     private final InsightService insights;
     private final SupportedPlatforms supportedPlatforms;
+    private final Bot.service.StorageManager storage;
 
     @Override
     public Acceptance transcribeLink(Owner owner, String url) {
@@ -70,11 +75,9 @@ public class LocalHomeApi implements HomeApi {
             log.warn("Отклонена неподдерживаемая ссылка на расшифровку: владелец={}", owner);
             return Acceptance.UNSUPPORTED;
         }
-        if (!quotas.allows(owner)) {
-            return Acceptance.QUOTA_EXCEEDED;
-        }
-        jobStore.enqueue(ProcessingJob.newLink(owner, url));
-        return Acceptance.STARTED;
+        // Предел, место и квота проверяются вместе с постановкой в очередь и
+        // под замком на аккаунт: врозь между ними помещался чужой запрос
+        return answer(admission.admit(ProcessingJob.newLink(owner, url)));
     }
 
     @Override
@@ -85,14 +88,23 @@ public class LocalHomeApi implements HomeApi {
             log.warn("Отклонена неподдерживаемая ссылка на скачивание: владелец={}", owner);
             return Acceptance.UNSUPPORTED;
         }
-        downloadService.createDownloadTask(owner, url, media);
-        return Acceptance.STARTED;
+        // Скачивание квоты не тратит, поэтому единственное, что его сдерживает, —
+        // предел задач и место на диске. Без них один чат забивал и очередь,
+        // и диск ссылками на длинные ролики, не нарушая ни одного правила
+        return answer(admission.admitDownload(owner,
+                () -> downloadService.createDownloadTask(owner, url, media)));
     }
 
     @Override
     public Acceptance transcribeTelegramFile(Owner owner, TelegramFile file) throws Exception {
-        // Квота проверяется до похода в Bot API: качать файл, который всё равно
+        // Дешёвая проверка до похода в Bot API: качать файл, который всё равно
         // не пойдёт в работу, — это минуты канала на пустой отказ
+        if (jobStore.tooManyActive(owner)) {
+            return Acceptance.TOO_MANY_ACTIVE;
+        }
+        if (!storage.hasRoom(owner)) {
+            return Acceptance.NO_ROOM;
+        }
         if (!quotas.allows(owner)) {
             return Acceptance.QUOTA_EXCEEDED;
         }
@@ -103,8 +115,16 @@ public class LocalHomeApi implements HomeApi {
             case VIDEO -> fileDownloader.downloadVideo(file.fileId(), chatId, file.fileName());
             case DOCUMENT -> fileDownloader.downloadDocument(file.fileId(), chatId, file.fileName());
         };
-        jobStore.enqueue(ProcessingJob.newFile(owner, saved));
-        return Acceptance.STARTED;
+
+        // Решающая проверка — здесь, вместе с постановкой в очередь: пока файл
+        // качался, человек мог занять последнюю расшифровку другим запросом.
+        // Отказ после скачивания означает, что файл надо убрать за собой:
+        // задачи не будет, а место он займёт
+        Acceptance verdict = answer(admission.admit(ProcessingJob.newFile(owner, saved)));
+        if (verdict != Acceptance.STARTED) {
+            deleteQuietly(saved);
+        }
+        return verdict;
     }
 
     @Override
@@ -166,6 +186,8 @@ public class LocalHomeApi implements HomeApi {
      *
      * <p>Владелец сверяется по той же расшифровке, что ищут кнопки форматов:
      * нашлась — задача его и уже посчитана, а значит, есть что читать модели.
+     * Сверка идёт по всем владельцам человека: чат и аккаунт на сайте — это
+     * один человек, и история у них общая.
      * Нечитаемый id — не ошибка вызова, а кнопка из очень старого сообщения,
      * и ответ на неё такой же, как на чужую задачу.</p>
      */
@@ -179,7 +201,11 @@ public class LocalHomeApi implements HomeApi {
             return Optional.of("Эта расшифровка больше недоступна.");
         }
 
-        if (jobStore.transcriptOf(id, owner).isEmpty()) {
+        // Сверяются все владельцы человека, а не только тот, чья кнопка: задачу
+        // могли поставить на сайте, а выжимку попросить из чата — ровно так же,
+        // как это уже работает у остановки задачи
+        if (accounts.ownersAround(owner).stream()
+                .allMatch(each -> jobStore.transcriptOf(id, each).isEmpty())) {
             log.info("Обработка не по своей задаче: владелец={}, jobId={}", owner, id);
             return Optional.of("Эта расшифровка больше недоступна.");
         }
@@ -191,23 +217,55 @@ public class LocalHomeApi implements HomeApi {
     }
 
     @Override
-    public java.util.List<Integer> loginChallenge(String code) {
-        return botLogins.challengeFor(code);
+    public Optional<String> loginLink(long chatId, String displayName) {
+        return botLogins.issue(chatId, displayName);
     }
 
+    /**
+     * Привязка чата к аккаунту по коду из кабинета.
+     *
+     * <p>Ограничитель стоит здесь, а не внутри {@code AccountService}: это
+     * единственная дверь, за которой команда {@code /link} из Telegram, и
+     * другой преграды у неё нет — команды приходят не через nginx, где считают
+     * попытки входа на сайт.</p>
+     *
+     * <p>Отказ по перебору выглядит для бота как «код не подошёл»: подсказывать
+     * подбирающему, что он упёрся в ограничитель, незачем.</p>
+     */
     @Override
-    public LoginConfirmation confirmBotLogin(long chatId, String code, String displayName,
-                                             int number) {
-        return switch (botLogins.confirm(chatId, code, displayName, number)) {
-            case CONFIRMED -> LoginConfirmation.CONFIRMED;
-            case WRONG_NUMBER -> LoginConfirmation.WRONG_NUMBER;
-            case STALE -> LoginConfirmation.STALE;
+    public java.util.Optional<String> linkTelegram(long chatId, String code) {
+        if (!linkAttempts.allows(chatId)) {
+            log.warn("Привязка отклонена: слишком много неверных кодов (chatId={})", chatId);
+            return Optional.empty();
+        }
+
+        Optional<String> title = accounts.redeemLinkCode(code, chatId)
+                .map(AccountService.Account::title);
+        if (title.isPresent()) {
+            linkAttempts.succeeded(chatId);
+        } else {
+            linkAttempts.failed(chatId);
+        }
+        return title;
+    }
+
+    /** Приговор очереди — тем же словарём, которым бот отвечает человеку. */
+    private static Acceptance answer(JobAdmission.Verdict verdict) {
+        return switch (verdict) {
+            case ACCEPTED -> Acceptance.STARTED;
+            case TOO_MANY_ACTIVE -> Acceptance.TOO_MANY_ACTIVE;
+            case NO_ROOM -> Acceptance.NO_ROOM;
+            case QUOTA_EXCEEDED -> Acceptance.QUOTA_EXCEEDED;
         };
     }
 
-    @Override
-    public java.util.Optional<String> linkTelegram(long chatId, String code) {
-        return accounts.redeemLinkCode(code, chatId).map(AccountService.Account::title);
+    /** Файл, для которого задачи не будет, места занимать не должен. */
+    private static void deleteQuietly(Path file) {
+        try {
+            java.nio.file.Files.deleteIfExists(file);
+        } catch (java.io.IOException e) {
+            log.warn("Не удалось убрать файл непринятой задачи: {}", file, e);
+        }
     }
 
     /** Строка задачи для сводки: чем она была и что с ней сейчас. */

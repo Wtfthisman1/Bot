@@ -53,6 +53,7 @@ public class TelegramBot extends TelegramLongPollingBot {
             new BotCommand("/download", "Скачать по ссылке"),
             new BotCommand("/upload", "Загрузить файлы через форму"),
             new BotCommand("/status", "Статус обработки"),
+            new BotCommand("/login", "Войти на сайт"),
             new BotCommand("/help", "Справка")
     );
 

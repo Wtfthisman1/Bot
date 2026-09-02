@@ -110,17 +110,10 @@ public class HomeApiController {
         return new CancelResponse(home.cancelJob(request.owner(), request.jobId()));
     }
 
-    @PostMapping("/accounts/bot-login/challenge")
-    public HomeProtocol.LoginChallengeResponse loginChallenge(
-            @RequestBody HomeProtocol.LoginChallengeRequest request) {
-        return new HomeProtocol.LoginChallengeResponse(home.loginChallenge(request.code()));
-    }
-
     @PostMapping("/accounts/bot-login")
-    public BotLoginResponse confirmBotLogin(@RequestBody BotLoginRequest request) {
-        return new BotLoginResponse(home.confirmBotLogin(
-                request.chatId(), request.code(), request.displayName(),
-                request.number()).name());
+    public BotLoginResponse loginLink(@RequestBody BotLoginRequest request) {
+        return new BotLoginResponse(
+                home.loginLink(request.chatId(), request.displayName()).orElse(null));
     }
 
     @PostMapping("/accounts/link")

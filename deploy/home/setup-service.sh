@@ -31,6 +31,16 @@ if pgrep -f "java -jar .*bot\.jar" >/dev/null 2>&1; then
     done
 fi
 
+# Привязка к адресу туннеля не должна зависеть от того, поднят ли wg0 прямо
+# сейчас: без ip_nonlocal_bind служба с SERVER_ADDRESS=10.8.0.2 не стартует,
+# пока NetworkManager держит адрес снятым
+SYSCTL_SRC="${PROJECT_DIR}/deploy/home/99-transcribot-bind.conf"
+if [[ -f "$SYSCTL_SRC" ]]; then
+    install -m 644 "$SYSCTL_SRC" /etc/sysctl.d/99-transcribot-bind.conf
+    sysctl -q -p /etc/sysctl.d/99-transcribot-bind.conf
+    echo "Разрешена привязка к адресу туннеля (net.ipv4.ip_nonlocal_bind=1)"
+fi
+
 install -m 644 "$UNIT_SRC" "$UNIT_DST"
 sed -i "s#^WorkingDirectory=.*#WorkingDirectory=${PROJECT_DIR}#" "$UNIT_DST"
 sed -i "s#^ExecStart=.*#ExecStart=/usr/bin/java -jar ${JAR}#" "$UNIT_DST"

@@ -41,6 +41,17 @@ public class TranscriptSegments {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    /**
+     * Предел на реплику и на имя голоса.
+     *
+     * <p>Формой правок можно было положить в базу что угодно и сколько угодно:
+     * поле приходит с сайта, а его никто не мерил. Реплика — это несколько
+     * секунд речи, две тысячи знаков она не наберёт даже у самого быстрого
+     * говорящего; имя голоса тем более.</p>
+     */
+    private static final int MAX_TEXT = 2000;
+    private static final int MAX_SPEAKER_NAME = 80;
+
     private final TranscriptSegmentRepository segments;
     private final TranscriptSpeakerRepository speakers;
 
@@ -94,7 +105,8 @@ public class TranscriptSegments {
      * задачу вызывающая сторона уже сверила с аккаунтом.</p>
      *
      * <p>Пустой текст не сохраняется: убрать сегмент совсем — это не правка, а
-     * дыра во времени, после которой субтитры разъезжаются.</p>
+     * дыра во времени, после которой субтитры разъезжаются. Слишком длинный
+     * обрезается: поле приходит с сайта, и мерить его больше негде.</p>
      *
      * @return сколько сегментов действительно изменилось
      */
@@ -111,6 +123,9 @@ public class TranscriptSegments {
         for (int i = 0; i < ids.size(); i++) {
             TranscriptSegmentEntity segment = mine.get(ids.get(i));
             String text = texts.get(i) == null ? "" : texts.get(i).strip();
+            if (text.length() > MAX_TEXT) {
+                text = text.substring(0, MAX_TEXT);
+            }
             if (segment == null || text.isEmpty() || text.equals(segment.getText())) {
                 continue;
             }
@@ -151,6 +166,9 @@ public class TranscriptSegments {
                 return;
             }
             String trimmed = name == null ? "" : name.strip();
+            if (trimmed.length() > MAX_SPEAKER_NAME) {
+                trimmed = trimmed.substring(0, MAX_SPEAKER_NAME);
+            }
             if (trimmed.isEmpty()) {
                 speakers.deleteById(new TranscriptSpeakerEntity.Key(jobId, label));
             } else {

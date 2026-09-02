@@ -96,6 +96,13 @@ configurations.all {
 tasks.named('test') { 
 	useJUnitPlatform()
 	maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
+
+	// Приложение читает .env рабочего каталога — и в тестах тоже. В боевом
+	// .env стоит SERVER_ADDRESS=10.8.0.2 (сокет привязан к туннелю), и тест с
+	// настоящим портом поднимал бы сервер на этом адресе, а стучался бы в
+	// localhost: «connection refused» на совершенно здоровом коде. Системное
+	// свойство перекрывает .env — источник systemProperties идёт раньше.
+	systemProperty 'SERVER_ADDRESS', ''
 }
 
 // Проверка стиля кода (временно отключено)

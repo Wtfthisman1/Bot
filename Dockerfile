@@ -13,6 +13,14 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Пользователь, от которого работает приложение. Внутри контейнера крутятся
+# yt-dlp и ffmpeg на чужих данных: выход из любого из них раньше сразу давал
+# root. Uid задан числом, чтобы права на смонтированных с хоста каталогах
+# сходились независимо от того, какой пользователь заведётся в образе.
+RUN groupadd --gid 10001 transcribot \
+    && useradd --uid 10001 --gid 10001 --create-home --home-dir /home/transcribot \
+       --shell /usr/sbin/nologin transcribot
+
 # Создаем рабочую директорию
 WORKDIR /app
 
@@ -23,7 +31,8 @@ RUN --mount=type=cache,target=/tmp/pip-cache \
     pip install -r requirements.txt
 
 # Создаем директории для кеша и загрузок
-RUN mkdir -p /app/upload /app/logs /app/.cache/huggingface
+RUN mkdir -p /app/upload /app/logs /app/.cache/huggingface \
+    && chown -R transcribot:transcribot /app
 
 # Предварительная загрузка модели Whisper (кешируем)
 COPY whisper_preload.py .
@@ -45,8 +54,14 @@ COPY src/main/resources/pythonScript/ ./pythonScript/
 # Копируем JAR файлы (обновляются при каждой сборке)
 COPY build/libs/ ./libs/
 
-# Копируем .env файл если есть
-COPY .env* ./
+# .env В ОБРАЗ НЕ КОПИРУЕТСЯ.
+#
+# Здесь было `COPY .env* ./`, и это отдавало все секреты сразу: слой образа
+# читает любой, у кого есть сам образ — `docker save` и `tar -x` хватает, root
+# внутри контейнера не нужен. В .env лежат токен бота (полная власть над ним),
+# пароль базы, общий ключ HOME_API_KEY, секрет Google и токен Hugging Face.
+# Переменные передаются при запуске (см. docker-compose.yml), а на домашней
+# машине приложение читает .env из рабочего каталога само.
 
 # Устанавливаем права на скрипты
 RUN chmod +x pythonScript/*.py
@@ -56,17 +71,25 @@ RUN ln -sf /usr/local/bin/python /usr/bin/python3 && \
     ln -sf /usr/local/bin/pip /usr/bin/pip3
 
 # === STAGE 4: Final runtime ===
+#
+# Процесс идёт не от root: docker-entrypoint.sh выравнивает права на
+# смонтированных каталогах и сбрасывает права через setpriv. Выход из yt-dlp или
+# ffmpeg упирается в непривилегированного transcribot, а не в root контейнера.
+# USER здесь не ставится намеренно: точка входа обязана начать root'ом, иначе
+# ей нечем чинить владельца тома, смонтированного с хоста.
 FROM base AS runtime
 
-# Копируем все из base stage
-COPY --from=base /usr/local/lib/python3.*/dist-packages /usr/local/lib/python3.*/dist-packages/
-COPY --from=base /app/.cache /app/.cache/
-COPY --from=base /app/upload /app/upload/
-COPY --from=base /app/logs /app/logs/
-COPY --from=base /app/pythonScript /app/pythonScript/
-COPY --from=base /app/docker-compose.yml /app/docker-compose.yml
-COPY --from=base /app/docker-entrypoint.sh /app/docker-entrypoint.sh
-COPY --from=base /app/libs /app/libs/
+# Копируем все из base stage. --chown обязателен: без него владельцем всего
+# скопированного снова становится root, и непривилегированный процесс не может
+# писать ни в upload, ни в logs, ни в кеш моделей
+COPY --chown=transcribot:transcribot --from=base /usr/local/lib/python3.*/dist-packages /usr/local/lib/python3.*/dist-packages/
+COPY --chown=transcribot:transcribot --from=base /app/.cache /app/.cache/
+COPY --chown=transcribot:transcribot --from=base /app/upload /app/upload/
+COPY --chown=transcribot:transcribot --from=base /app/logs /app/logs/
+COPY --chown=transcribot:transcribot --from=base /app/pythonScript /app/pythonScript/
+COPY --chown=transcribot:transcribot --from=base /app/docker-compose.yml /app/docker-compose.yml
+COPY --chown=transcribot:transcribot --from=base /app/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --chown=transcribot:transcribot --from=base /app/libs /app/libs/
 
 # Переменные среды
 ENV UPLOAD_DIR=/app/upload
@@ -81,8 +104,11 @@ VOLUME ["/app/upload", "/app/logs", "/app/.cache"]
 
 # Порт и healthcheck
 EXPOSE 8080
+# Actuator слушает свой порт на 127.0.0.1 (MANAGEMENT_PORT=8081), а не 8080:
+# на 8080 у него 404, и проверка считала бы здоровый контейнер больным.
+# Тот же адрес, что в healthcheck docker-compose.yml
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:8080/actuator/health || exit 1
+  CMD curl -f http://127.0.0.1:8081/actuator/health || exit 1
 
 # Точка входа
 ENTRYPOINT ["./docker-entrypoint.sh"]

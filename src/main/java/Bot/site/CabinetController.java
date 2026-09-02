@@ -19,9 +19,11 @@ import Bot.config.Profiles;
 import Bot.home.HomeApi;
 import Bot.owner.Owner;
 import Bot.processing.JobEntity;
+import Bot.processing.JobAdmission;
 import Bot.processing.JobStore;
 import Bot.processing.MediaKind;
 import Bot.processing.ProcessingJob;
+import Bot.service.MediaFiles;
 import Bot.service.StorageManager;
 import Bot.service.SupportedPlatforms;
 import Bot.transcription.Transcript;
@@ -48,6 +50,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.io.IOException;
@@ -71,6 +75,7 @@ public class CabinetController {
     private final HomeApi home;
     private final JobHistory history;
     private final JobStore jobStore;
+    private final JobAdmission admission;
     private final QuotaService quotas;
     private final AccountService accounts;
     private final StorageManager storage;
@@ -79,9 +84,12 @@ public class CabinetController {
     private final TranscriptSegments transcripts;
     private final TranscriptRenderer renderer;
     private final Bot.transcription.TranscriptSearch transcriptSearch;
+    private final ActiveSessions activeSessions;
+    private final LoginNotice loginNotice;
 
     @GetMapping
-    public String cabinet(@AuthenticationPrincipal AccountPrincipal principal, Model model) {
+    public String cabinet(@AuthenticationPrincipal AccountPrincipal principal,
+                          HttpServletRequest request, Model model) {
         model.addAttribute("account", principal);
         model.addAttribute("quota", quotas.of(principal.accountId()));
         model.addAttribute("jobs", history.of(principal.accountId()));
@@ -91,6 +99,19 @@ public class CabinetController {
         // и так одно целое. Показывать ему кнопку — сбивать с толку
         model.addAttribute("telegramLinked",
                 accounts.providersOf(principal.accountId()).contains(IdentityProvider.TELEGRAM));
+
+        // Пароль: есть ли он вообще, есть ли куда его прикладывать (почта) и
+        // надо ли спрашивать старый. Последнее зависит от двери, которой вошли:
+        // вошедшему паролем без старого менять нельзя, остальным — можно, и это
+        // и есть восстановление вместо письма, которого мы слать не умеем
+        boolean hasEmail = accounts.findById(principal.accountId())
+                .map(account -> account.email() != null && !account.email().isBlank())
+                .orElse(false);
+        model.addAttribute("passwordEmail", hasEmail);
+        model.addAttribute("passwordSet", accounts.hasPassword(principal.accountId()));
+        model.addAttribute("passwordAsksCurrent", SessionLogin.doorOf(request)
+                .map(door -> door == SessionLogin.Door.PASSWORD)
+                .orElse(true));
         return "cabinet";
     }
 
@@ -130,15 +151,35 @@ public class CabinetController {
             redirect.addFlashAttribute("error", "Файл не выбран.");
             return "redirect:/cabinet";
         }
-        if (!quotas.allows(owner)) {
-            redirect.addFlashAttribute("error", HomeApi.Acceptance.QUOTA_EXCEEDED.userMessage());
+        // В чате документы фильтруются по расширению, а здесь не фильтровались
+        // вовсе: на диск ложился любой файл до 2,5 ГБ, и задача уходила в
+        // очередь, чтобы упасть на ffmpeg через полчаса
+        if (!MediaFiles.isMedia(file.getOriginalFilename())) {
+            redirect.addFlashAttribute("error",
+                    "Такой файл расшифровать не получится. " + MediaFiles.supportedListText());
             return "redirect:/cabinet";
         }
-
+        // Предел задач, место и квота проверяются вместе с постановкой в
+        // очередь и под замком на аккаунт: врозь между «посчитал» и «поставил»
+        // помещалась соседняя вкладка того же человека. Файл при этом
+        // сохраняется до приговора и при отказе убирается: место считается по
+        // тому, что лежит на диске, а лежит там уже и он
         Path saved = storage.uploadedPath(owner, file.getOriginalFilename());
         Files.createDirectories(saved.getParent());
         file.transferTo(saved);
-        jobStore.enqueue(ProcessingJob.newFile(owner, saved));
+
+        JobAdmission.Verdict verdict = admission.admit(ProcessingJob.newFile(owner, saved));
+        if (!verdict.accepted()) {
+            Files.deleteIfExists(saved);
+            redirect.addFlashAttribute("error", switch (verdict) {
+                case NO_ROOM -> "Не хватает места: на аккаунт отведено "
+                        + storage.maxBytesPerOwner() / 1073741824 + " ГБ. "
+                        + "Старые записи уносит ночная чистка через две недели.";
+                case TOO_MANY_ACTIVE -> HomeApi.Acceptance.TOO_MANY_ACTIVE.userMessage();
+                default -> HomeApi.Acceptance.QUOTA_EXCEEDED.userMessage();
+            });
+            return "redirect:/cabinet";
+        }
 
         log.info("Файл принят из кабинета: аккаунт={}, имя='{}', размер={} байт",
                 principal.accountId(), file.getOriginalFilename(), file.getSize());
@@ -224,6 +265,67 @@ public class CabinetController {
         model.addAttribute("titles", titles);
         model.addAttribute("hits", transcriptSearch.find(titles.keySet(), q));
         return "search";
+    }
+
+    /**
+     * Закрывает все остальные сессии этого аккаунта.
+     *
+     * <p>Ответ на сообщение «в ваш аккаунт вошли», которое бот присылает после
+     * каждого входа по ссылке. Единственный способ увести аккаунт через бота —
+     * уговорить человека переслать свою ссылку; кнопка здесь делает такой
+     * увод обратимым, пока сессия жива.</p>
+     */
+    @PostMapping("/sessions/close")
+    public String closeSessions(@AuthenticationPrincipal AccountPrincipal principal,
+                                HttpServletRequest request, RedirectAttributes redirect) {
+        HttpSession current = request.getSession(false);
+        int closed = activeSessions.closeOthers(principal.accountId(),
+                current == null ? "" : current.getId());
+        redirect.addFlashAttribute("message", closed == 0
+                ? "Больше нигде вход не выполнен — закрывать нечего."
+                : "Готово. Закрыто других сеансов: " + closed + ".");
+        return "redirect:/cabinet";
+    }
+
+    /**
+     * Смена пароля — она же его восстановление.
+     *
+     * <p>Сброса по письму нет: почтовой службы у нас нет вовсе, и отправить
+     * ссылку «я забыл пароль» некуда. Вместо этого работает вторая дверь —
+     * бот, Telegram или Google: войдя ими, человек доказал, что аккаунт его, и
+     * задаёт новый пароль, не зная старого. Кто вошёл паролем, повторяет его:
+     * иначе чужая открытая вкладка меняла бы пароль молча.</p>
+     *
+     * <p>После смены остальные сеансы закрываются, а в привязанный чат уходит
+     * сообщение. Смена пароля — обычный первый ход того, кто увёл аккаунт;
+     * молчать о ней означало бы оставить человека без единственного признака,
+     * по которому он это заметит.</p>
+     */
+    @PostMapping("/password")
+    public String changePassword(@AuthenticationPrincipal AccountPrincipal principal,
+                                 @RequestParam(required = false) String currentPassword,
+                                 @RequestParam String newPassword,
+                                 HttpServletRequest request, RedirectAttributes redirect) {
+        // Неизвестную дверь толкуем строго: сессии, заведённые до появления
+        // отметки, не должны давать смену пароля без старого
+        boolean mustKnowCurrent = SessionLogin.doorOf(request)
+                .map(door -> door == SessionLogin.Door.PASSWORD)
+                .orElse(true);
+        try {
+            accounts.changePassword(principal.accountId(), currentPassword,
+                    newPassword, mustKnowCurrent);
+        } catch (IllegalArgumentException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+            return "redirect:/cabinet";
+        }
+
+        HttpSession current = request.getSession(false);
+        activeSessions.closeOthers(principal.accountId(), current == null ? "" : current.getId());
+        loginNotice.passwordChanged(accounts.ownersOf(principal.accountId()), request);
+
+        redirect.addFlashAttribute("message",
+                "Пароль изменён. Остальные сеансы закрыты.");
+        return "redirect:/cabinet";
     }
 
     /** Код привязки: его человек присылает боту, чтобы чат стал этим аккаунтом. */

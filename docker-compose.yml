@@ -39,18 +39,26 @@ services:
       dockerfile: Dockerfile
       target: runtime
     container_name: telegram-bot
+    # На каком адресе публиковать порт. Умолчание закрытое: раньше здесь стояло
+    # «8080:8080», то есть сайт и /internal видело любое устройство домашней
+    # сети — мимо nginx, мимо HTTPS и мимо ограничения попыток входа (оно
+    # верит X-Real-IP, который перезаписывает nginx).
+    #
+    # 127.0.0.1 подходит, когда nginx стоит на этой же машине. Когда запросы
+    # приходят с VPS по WireGuard, в .env задаётся BIND_ADDRESS=10.8.0.2 —
+    # тот же адрес, что и SERVER_ADDRESS для запуска без Docker.
     ports:
-      - "8080:8080"
+      - "${BIND_ADDRESS:-127.0.0.1}:8080:8080"
+    # Весь .env целиком — и это единственный способ не отстать от него снова.
+    # Раньше переменные перечислялись здесь руками, список отстал от
+    # systemd-развёртывания, и запуск в Docker молча работал без HOME_API_KEY,
+    # без ключей Google и с базой, которую искали на localhost. В образ .env
+    # по-прежнему не попадает (см. Dockerfile): env_file читается при запуске.
+    env_file:
+      - .env
+    # Ниже — только то, что внутри контейнера обязано отличаться от .env.
+    # environment сильнее env_file, поэтому эти значения побеждают
     environment:
-      # Обязательные переменные
-      - BOT_TOKEN=${BOT_TOKEN}
-      - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
-      
-      # URL для загрузок
-      - UPLOAD_BASE_URL=${UPLOAD_BASE_URL}
-      # Без этого ссылка на скачивание указывала бы на localhost внутри контейнера
-      - DOWNLOAD_BASE_URL=${DOWNLOAD_BASE_URL}
-      
       # Предзагрузка моделей Whisper
       - WHISPER_PRELOAD_MODELS=medium
       - WHISPER_DEVICE=cpu
@@ -64,6 +72,16 @@ services:
       # Пути к Python скриптам для Docker
       - WHISPER_SCRIPT=/app/pythonScript/Transcribe.py
       - DOWNLOADER_SCRIPT=/app/pythonScript/Downloader.py
+
+      # База — в соседнем контейнере, а не на localhost, и порт внутри сети
+      # контейнеров обычный. Из .env сюда пришли бы localhost и 5433
+      - DB_HOST=postgres
+      - DB_PORT=5432
+
+      # Внутри контейнера слушаем все интерфейсы: наружу порт всё равно
+      # опубликован одним адресом (см. ports), а привязка к адресу хоста
+      # внутри сетевого пространства контейнера просто не поднимется
+      - SERVER_ADDRESS=
     volumes:
       # Пользовательские файлы
       - ./upload:/app/upload

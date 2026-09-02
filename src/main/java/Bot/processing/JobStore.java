@@ -36,8 +36,39 @@ public class JobStore {
     /** Незавершённые состояния — то, что пользователь считает «в работе». */
     private static final List<JobState> UNFINISHED = List.of(JobState.QUEUED, JobState.RUNNING);
 
+    /**
+     * Сколько незавершённых задач разрешено одному владельцу.
+     *
+     * <p>Очередь одна на всех и разбирается по порядку поступления. Скачивание
+     * при этом квоты не тратит — значит, без отдельного предела один чат мог
+     * поставить сколько угодно загрузок и занять и очередь, и видеокарту, и
+     * диск всем остальным, не нарушив ни одного правила.</p>
+     */
+    @org.springframework.beans.factory.annotation.Value("${queue.max-active-per-owner:10}")
+    private int maxActivePerOwner;
+
     private final JobRepository repository;
     private final RunningProcesses processes;
+
+    /**
+     * Не слишком ли много этот владелец уже заказал.
+     *
+     * <p>Спрашивается до постановки задачи — и в чате, и на сайте, и в форме.
+     * Ноль и меньше означает «без предела».</p>
+     */
+    @Transactional(readOnly = true)
+    public boolean tooManyActive(Owner owner) {
+        if (maxActivePerOwner <= 0) {
+            return false;
+        }
+        long active = repository.countByOwnerTypeAndOwnerIdAndStateIn(
+                owner.type(), owner.id(), UNFINISHED);
+        if (active >= maxActivePerOwner) {
+            log.info("Владелец {} упёрся в предел незавершённых задач: {}", owner, active);
+            return true;
+        }
+        return false;
+    }
 
     /** Ставит задачу в очередь. */
     @Transactional

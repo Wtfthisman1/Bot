@@ -72,24 +72,28 @@ public class FileCleanupWorker {
 
 
     /**
-     * Очищает файлы конкретного пользователя
+     * Очищает файлы конкретного владельца.
+     *
+     * <p>Имя каталога не разбирается. Раньше оно приводилось к числу, и всё,
+     * что числом не было, пропускалось с жалобой в журнал, — а каталог
+     * аккаунта сайта называется {@code acc-<uuid>} (см. {@code Owner}). То
+     * есть у всех, кто пришёл с сайта, файлы не чистились вовсе: обещанные две
+     * недели хранения для них не выполнялись, и диск рос без предела.</p>
+     *
+     * <p>Разбирать имя и незачем: чистятся только подкаталоги {@code uploaded}
+     * и {@code downloaded}, а их у постороннего каталога просто нет.</p>
      */
     private void cleanupUserFiles(Path userDir, Instant cutoff) {
         try {
-            // Проверяем, что это папка пользователя (числовой ID)
-            long chatId = Long.parseLong(userDir.getFileName().toString());
-            log.debug("Очистка файлов пользователя: {}", chatId);
+            log.debug("Очистка файлов владельца: {}", userDir.getFileName());
 
-            // Очищаем видео и аудио файлы
             cleanupDirectory(userDir.resolve("uploaded"), cutoff);
             cleanupDirectory(userDir.resolve("downloaded"), cutoff);
 
             // Транскрипции НЕ удаляем!
 
-        } catch (NumberFormatException e) {
-            log.warn("Неверное имя папки пользователя: {}", userDir.getFileName());
         } catch (Exception e) {
-            log.error("Ошибка очистки файлов пользователя {}", userDir.getFileName(), e);
+            log.error("Ошибка очистки файлов владельца {}", userDir.getFileName(), e);
         }
     }
 

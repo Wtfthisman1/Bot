@@ -17,6 +17,17 @@ map $request_uri $transcribot_login_key {
 }
 limit_req_zone $transcribot_login_key zone=transcribot_login:10m rate=20r/m;
 
+# Журнал без строки запроса — только для дверей входа.
+#
+# Виджет Telegram возвращает подпись прямо в адресе:
+# /auth/telegram?id=…&hash=… . Подпись верна до конца своего срока, поэтому в
+# обычном журнале такая строка лежит готовым пропуском в аккаунт для всякого,
+# кто до журнала доберётся. $uri — это путь уже без аргументов. Referer здесь
+# тоже лишний по той же причине.
+log_format transcribot_noquery '$remote_addr - $remote_user [$time_local] '
+                               '"$request_method $uri $server_protocol" '
+                               '$status $body_bytes_sent "$http_user_agent"';
+
 server {
     listen 80;
     listen [::]:80;
@@ -69,6 +80,19 @@ server {
     # Actuator и так слушает отдельный порт на 127.0.0.1, но полагаться
     # на одну преграду не стоит.
     location /actuator  { return 404; }
+
+    # ── Двери входа: то же самое, но без адресов в журнале ──
+    location /auth/ {
+        access_log /var/log/nginx/bot-access.log transcribot_noquery;
+
+        limit_req zone=transcribot_login burst=10 nodelay;
+        limit_req_status 429;
+
+        proxy_pass http://HOME_WG_IP:8080;
+
+        proxy_intercept_errors on;
+        error_page 502 504 = @asleep;
+    }
 
     # ── Всё остальное — домой ──
     # Сайт (страницы входа и кабинет), ссылки на скачивание и форма загрузки

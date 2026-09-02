@@ -7,6 +7,11 @@ package Bot.handler;
  * работают в обе стороны: если ссылка уже прислана и ждёт выбора — работа
  * стартует сразу, иначе бот просит ссылку.</p>
  *
+ * <p>Кнопок подтверждения — «Это я» под входом и «Да, это мой аккаунт» под
+ * привязкой — здесь больше нет: обе подтверждали действие, начатое кем-то
+ * другим. Вход теперь начинает сам чат ({@link CommandHandler#login}), а код
+ * привязки человек набирает руками, глядя в свой кабинет.</p>
+ *
  * <p>«Скачать» — двухшаговая: сначала спрашивается формат (аудио/видео), и лишь
  * потом запрашивается ссылка либо запускается работа по уже отложенной. Первый
  * шаг состояние не трогает, поэтому отложенная ссылка доживает до выбора
@@ -68,16 +73,6 @@ public class CallbackHandler {
             return;
         }
 
-        if (callbackData.startsWith(Keyboards.CB_LOGIN_PREFIX)) {
-            handleLoginConfirmation(chatId, callbackData, userName);
-            return;
-        }
-
-        if (callbackData.startsWith(Keyboards.CB_LINK_PREFIX)) {
-            handleLinkConfirmation(chatId, callbackData);
-            return;
-        }
-
         switch (callbackData) {
             case Keyboards.CB_TRANSCRIBE ->
                     startOrAsk(chatId, new Pending(Mode.TRANSCRIBE, MediaKind.AUDIO), userName);
@@ -94,6 +89,7 @@ public class CallbackHandler {
                 commandHandler.upload(chatId);
             }
             case Keyboards.CB_STATUS -> commandHandler.status(chatId);
+            case Keyboards.CB_LOGIN -> commandHandler.login(chatId, userName);
             case Keyboards.CB_HELP -> commandHandler.help(chatId);
             case Keyboards.CB_CANCEL -> commandHandler.cancel(chatId);
             default -> {
@@ -101,87 +97,6 @@ public class CallbackHandler {
                 commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
             }
         }
-    }
-
-    /**
-     * Разбирает {@code login:<число>|no:<код>} — ответ на просьбу подтвердить вход.
-     *
-     * <p>Вместо «да» приходит выбранное человеком число: подтверждает вход не
-     * нажатие кнопки, а совпадение с тем, что показано на странице. Кто ссылку
-     * получил, но страницы не открывал, сверять не с чем — и это единственная
-     * защита, которая работает без внимательного чтения предупреждений.</p>
-     *
-     * <p>Отказ по «Это не я» ничего не гасит намеренно: код протухнет сам, а
-     * гашение дало бы постороннему способ мешать чужому входу. Промах по числу —
-     * другое дело: там код гасится, и это решает дом.</p>
-     */
-    private void handleLoginConfirmation(long chatId, String callbackData, String userName) {
-        String[] parts = callbackData.split(":", 3);
-        if (parts.length < 3) {
-            log.warn("Неразбираемое подтверждение входа: chatId={}", chatId);
-            commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
-            return;
-        }
-
-        if ("no".equals(parts[1])) {
-            log.info("Вход на сайт отклонён из чата: chatId={}", chatId);
-            commandHandler.showMenu(chatId,
-                    "👌 Понял, вход не подтверждаю. Если ссылку прислал кто-то другой — "
-                            + "просто не открывайте её.");
-            return;
-        }
-
-        int number;
-        try {
-            number = Integer.parseInt(parts[1]);
-        } catch (NumberFormatException e) {
-            log.warn("Неразбираемое число в подтверждении входа: chatId={}", chatId);
-            commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
-            return;
-        }
-
-        try {
-            switch (home.confirmBotLogin(chatId, parts[2], userName, number)) {
-                case CONFIRMED -> commandHandler.showMenu(chatId,
-                        "✅ Вход подтверждён. Возвращайтесь на вкладку с сайтом — "
-                                + "она откроет кабинет сама.");
-                case WRONG_NUMBER -> commandHandler.showMenu(chatId,
-                        "🛑 Число не совпало, вход отменён.\n\n"
-                                + "Если вы входили сами — откройте страницу входа заново и "
-                                + "выберите то число, которое на ней показано. Если страницу "
-                                + "вы не открывали, значит ссылку прислал посторонний: "
-                                + "он пытался войти в ваш аккаунт, и у него не вышло.");
-                case STALE -> commandHandler.showMenu(chatId,
-                        "🕓 Код устарел или уже сработал. Откройте страницу входа заново.");
-            }
-        } catch (Exception e) {
-            log.error("Не удалось подтвердить вход на сайт: chatId={}", chatId, e);
-            commandHandler.showMenu(chatId,
-                    "🌙 Сейчас не выходит подтвердить вход — рабочая машина недоступна.");
-        }
-    }
-
-    /**
-     * Разбирает {@code lnk:yes|no:<код>} — ответ на просьбу привязать чат.
-     *
-     * <p>Отказ, как и у входа, ничего не гасит: код протухнет сам. Гасить его
-     * по «Нет» значило бы дать постороннему способ мешать чужой привязке.</p>
-     */
-    private void handleLinkConfirmation(long chatId, String callbackData) {
-        String[] parts = callbackData.split(":", 3);
-        if (parts.length < 3) {
-            log.warn("Неразбираемое подтверждение привязки: chatId={}", chatId);
-            commandHandler.showMenu(chatId, "🤔 Эта кнопка устарела. Выберите действие:");
-            return;
-        }
-
-        if (!"yes".equals(parts[1])) {
-            log.info("Привязка чата отклонена: chatId={}", chatId);
-            commandHandler.showMenu(chatId, "👌 Понял, ничего не связываю.");
-            return;
-        }
-
-        commandHandler.redeemLink(chatId, parts[2]);
     }
 
     /**
