@@ -137,11 +137,20 @@ public class TelegramBot extends TelegramLongPollingBot {
             messageHandler.handleAudio(chatId, message.getAudio(), name);
         } else if (message.hasVideo()) {
             messageHandler.handleVideo(chatId, message.getVideo(), name);
+        } else if (message.hasVideoNote()) {
+            // Кружок Telegram шлёт отдельным типом, а не как video — без этой
+            // ветки он попадал в «не поддерживается» и терялся молча
+            messageHandler.handleVideoNote(chatId, message.getVideoNote(), name);
         } else if (message.hasDocument()) {
             messageHandler.handleDocument(chatId, message.getDocument(), name);
         } else {
-            // Стикеры, локации, контакты и прочее — бот их не умеет, но знать об этом полезно
-            log.info("Тип сообщения не поддерживается и проигнорирован: chatId={}", chatId);
+            // Стикеры, картинки, локации, контакты. Молчать нельзя: человек
+            // прислал что-то и вправе думать, что бот занят делом, — а бот
+            // просто не понял. Пусть лучше знает сразу.
+            log.info("Тип сообщения не поддерживается: chatId={}", chatId);
+            commandHandler.showMenu(chatId,
+                    "🤷 С таким я работать не умею. Пришлите голосовое, кружок, "
+                            + "аудио, видео или ссылку.");
         }
     }
 

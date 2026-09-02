@@ -11,7 +11,7 @@ package Bot.handler;
  * <p>Связан с {@link HomeApi} (туда уходит вся работа), {@link MessageSender}
  * и {@link UserSessionService}. Основные методы:
  * {@code handleText}, {@code handleVoice}, {@code handleAudio},
- * {@code handleVideo}, {@code handleDocument}.</p>
+ * {@code handleVideo}, {@code handleVideoNote}, {@code handleDocument}.</p>
  */
 import Bot.handler.UserSessionService.Pending;
 import Bot.home.HomeApi;
@@ -32,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.objects.Audio;
 import org.telegram.telegrambots.meta.api.objects.Document;
 import org.telegram.telegrambots.meta.api.objects.Video;
+import org.telegram.telegrambots.meta.api.objects.VideoNote;
 import org.telegram.telegrambots.meta.api.objects.Voice;
 
 import java.util.ArrayList;
@@ -90,7 +91,7 @@ public class MessageHandler {
                         null, Keyboards.cancel());
             } else {
                 commandHandler.showMenu(chatId,
-                        "💡 Пришлите голосовое, аудио, видео или ссылку — либо выберите действие:");
+                        "💡 Пришлите голосовое, кружок, аудио, видео или ссылку — либо выберите действие:");
             }
             return;
         }
@@ -134,6 +135,26 @@ public class MessageHandler {
         String fileName = video.getFileName() != null ? video.getFileName() : "video.mp4";
         transcribeMedia(chatId, video.getFileSize(), "🎬 Видео получено. Расшифровываю...",
                 new TelegramFile(video.getFileId(), fileName, TelegramFile.Kind.VIDEO));
+    }
+
+    /**
+     * Кружок — это тот же mp4, только Telegram присылает его отдельным типом.
+     *
+     * <p>Имени файла у кружка нет вовсе: в {@code VideoNote} есть длительность,
+     * размер и длина стороны — и всё. Поэтому имя берётся постоянное, а вид
+     * остаётся {@code VIDEO}: дому в нём важно, чем распаковывать, а распаковка
+     * та же самая. Заводить ради кружка ещё одно значение в протоколе значило бы
+     * снова обновлять обе половины разом — без всякой пользы.</p>
+     */
+    public void handleVideoNote(long chatId, VideoNote videoNote, String name) {
+        log.info("Получен кружок: chatId={}, длительность={}с, размер={}",
+                chatId, videoNote.getDuration(), videoNote.getFileSize());
+        // Размер у кружка Integer, а не Long, как у остальных медиа, — это в
+        // самой библиотеке; null возможен и там, и здесь
+        Integer size = videoNote.getFileSize();
+        transcribeMedia(chatId, size == null ? null : size.longValue(),
+                "⭕ Кружок получен. Расшифровываю...",
+                new TelegramFile(videoNote.getFileId(), "video_note.mp4", TelegramFile.Kind.VIDEO));
     }
 
     public void handleDocument(long chatId, Document document, String name) {

@@ -6,6 +6,7 @@ import Bot.processing.MediaKind;
 import Bot.home.HomeApi;
 import Bot.insight.InsightKind;
 import Bot.telegram.MessageSender;
+import org.telegram.telegrambots.meta.api.objects.VideoNote;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +23,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * Разбор текстовых сообщений: ссылка запускает выбранное действие,
@@ -98,6 +100,26 @@ class MessageHandlerTest {
     }
 
     /** Бот сам попросил тему — значит, весь ответ и есть тема. */
+    /**
+     * Кружок Telegram шлёт отдельным типом, и раньше он терялся молча. Проверка
+     * держит две вещи: файл уходит домой как видео (протокол о кружках не знает)
+     * и с постоянным именем — своего у кружка нет.
+     */
+    @Test
+    void videoNoteGoesHomeAsVideo() throws Exception {
+        when(home.transcribeTelegramFile(any(), any())).thenReturn(HomeApi.Acceptance.STARTED);
+        VideoNote note = new VideoNote();
+        note.setFileId("круглый-файл");
+        note.setDuration(6);
+        note.setFileSize(1_200_000);
+
+        handler.handleVideoNote(CHAT, note, "Аня");
+
+        verify(home).transcribeTelegramFile(any(),
+                eq(new HomeApi.TelegramFile("круглый-файл", "video_note.mp4",
+                        HomeApi.TelegramFile.Kind.VIDEO)));
+    }
+
     @Test
     void awaitedTopicGoesStraightToTheModel() {
         sessions.awaitTopic(CHAT, "job-1");
